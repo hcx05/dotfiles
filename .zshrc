@@ -119,3 +119,8 @@ export OPENAI_API_KEY="sk-proj-lCXvst9ZRDAf6qL6-0BBtYzSYy14Fnc_0Mi8iW9A-s9u4Uec6
 export OPENAI_BASE_URL="https://api.openai.com/v1"
 
 export PATH="$HOME/.npm-global/bin:$PATH"
+# Auto start tmux for interactive shells
+if command -v tmux &> /dev/null && [ -z "$TMUX" ]; then
+  tmux attach -t main || tmux new -s main
+fi
+alias ls='lsd'

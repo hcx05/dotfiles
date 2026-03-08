@@ -154,4 +154,3 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
-export OPENAI_API_KEY="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"
