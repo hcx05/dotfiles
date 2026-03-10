@@ -115,8 +115,6 @@ source $ZSH/oh-my-zsh.sh
 export HOSTNAME=$(cat /etc/hostname)
 PROMPT='%n@%m %~ %# '
 neofetch
-export OPENAI_API_KEY="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"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
 
 export PATH="$HOME/.npm-global/bin:$PATH"
 # Auto start tmux for interactive shells
@@ -124,3 +122,5 @@ if command -v tmux &> /dev/null && [ -z "$TMUX" ]; then
   tmux attach -t main || tmux new -s main
 fi
 alias ls='lsd'
+alias vim="nvim"
+
