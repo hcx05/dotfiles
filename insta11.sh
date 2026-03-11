@@ -31,9 +31,8 @@ info "Updating package list"
 sudo apt-get update
 
 info "Installing required packages (System & CLI Tools)"
-# 包含你要求的 lsd, htop, bat (batcat)
 PACKAGES=(
-  git curl zsh tmux neofetch 
+  git curl zsh tmux neofetch unzip
   lsd htop bat 
   ripgrep gcc g++ clangd neovim 
   nodejs npm pipx
@@ -43,10 +42,26 @@ for pkg in "${PACKAGES[@]}"; do
   install_apt_pkg "$pkg"
 done
 
+# --- 1.5 安裝 Nerd Fonts (解決圖示問號問題) ---
+FONT_DIR="${HOME}/.local/share/fonts"
+if [ ! -d "$FONT_DIR" ] || [ ! -f "$FONT_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
+    info "Installing JetBrainsMono Nerd Font..."
+    mkdir -p "$FONT_DIR"
+    # 下載壓縮包
+    curl -fLO https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/JetBrainsMono.tar.xz
+    # 解壓縮到字體目錄
+    tar -xf JetBrainsMono.tar.xz -C "$FONT_DIR"
+    rm JetBrainsMono.tar.xz
+    # 更新系統字體快取
+    fc-cache -fv >/dev/null
+    ok "Nerd Font installed successfully"
+else
+    ok "Nerd Font already exists"
+fi
+
 # --- 2. 處理 Oh My Zsh (保留現有軟連結) ---
 if [ ! -d "${HOME}/.oh-my-zsh" ]; then
   info "Installing Oh My Zsh (KEEP_ZSHRC=yes to protect your symlink)"
-  # 使用 unattended 模式避免中斷，並強制保留你已經連結好的 .zshrc
   KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
   ok "Oh My Zsh base installed"
 else
@@ -65,7 +80,7 @@ else
   git -C "$P10K_DIR" pull --ff-only || warn "P10k update failed"
 fi
 
-# --- 4. 配置開發環境依賴 (為了配合你的 nvim 腳本) ---
+# --- 4. 配置開發環境依賴 ---
 if have_cmd pipx; then
   info "Ensuring pipx path"
   pipx ensurepath || true
@@ -86,7 +101,6 @@ if have_cmd npm; then
 fi
 
 # --- 5. 檔案權限處理 ---
-# 確保你的 tmux 狀態列腳本有執行權限 (對應你的 .tmux.conf)
 if [ -f "${HOME}/.tmux_status.sh" ]; then
   info "Setting executable permission for .tmux_status.sh"
   chmod +x "${HOME}/.tmux_status.sh"
@@ -95,22 +109,15 @@ fi
 # --- 6. 最終檢查與清理 ---
 echo
 info "--- Environment Summary ---"
+fc-list : family | grep -i "Nerd" >/dev/null && ok "Nerd Font: Detected ✨" || warn "Nerd Font: Not detected"
 have_cmd zsh && zsh --version
-have_cmd tmux && tmux -V
 have_cmd lsd && echo "lsd: $(lsd --version | head -n 1)"
-have_cmd htop && echo "htop: installed"
-# 在 Kali/Debian 中，bat 的指令名稱是 batcat
-if have_cmd batcat; then
-  ok "bat (as batcat) is ready"
-fi
 
 echo
 ok "Core dotfiles environment setup finished!"
-warn "Note: This script ONLY handles system tools and Zsh/Tmux/Neofetch."
-info "Please run your separate Neovim setup script next."
 info "To apply Zsh changes immediately, run: exec zsh"
+info "Remember to set your Terminal Font to 'JetBrainsMono Nerd Font'!"
 
-# 自動提醒切換 Shell
 if [ "$SHELL" != "$(which zsh)" ]; then
     info "Changing default shell to zsh..."
     sudo chsh -s "$(which zsh)" "$USER"
