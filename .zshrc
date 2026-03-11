@@ -124,3 +124,5 @@ fi
 alias ls='lsd'
 alias vim="nvim"
 
+alias cat='batcat -p'
+alias bcat='batcat'
