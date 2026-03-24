@@ -35,6 +35,7 @@ PACKAGES=(
     git curl zsh tmux neofetch unzip
     lsd htop bat ripgrep
     nodejs npm pipx
+    xclip  # 新增：確保 tmux-yank 可以跟系統剪貼簿連動
 )
 
 for pkg in "${PACKAGES[@]}"; do
@@ -93,6 +94,21 @@ fi
 if [ -f "$DOTFILES_DIR/.tmux_status.sh" ]; then
     info "Ensuring executable permission for .tmux_status.sh"
     chmod +x "$DOTFILES_DIR/.tmux_status.sh"
+fi
+
+# --- 6.5 處理 Tmux Plugin Manager (TPM) ---
+TPM_DIR="${HOME}/.tmux/plugins/tpm"
+if [ ! -d "$TPM_DIR" ]; then
+    info "Installing Tmux Plugin Manager (TPM)..."
+    git clone https://github.com/tmux-plugins/tpm "$TPM_DIR"
+    ok "TPM installed"
+    
+    # 自動安裝插件 (避免手動按 Prefix + I)
+    info "Installing tmux plugins via TPM..."
+    bash "$TPM_DIR/bin/install_plugins"
+    ok "Tmux plugins installed"
+else
+    ok "TPM directory already exists"
 fi
 
 # --- 7. 最終檢查與清理 ---
