@@ -117,10 +117,6 @@ PROMPT='%n@%m %~ %# '
 neofetch
 
 export PATH="$HOME/.npm-global/bin:$PATH"
-# Auto start tmux for interactive shells
-if command -v tmux &> /dev/null && [ -z "$TMUX" ]; then
-  tmux attach -t main || tmux new -s main
-fi
 alias ls='lsd'
 alias vim="nvim"
 
