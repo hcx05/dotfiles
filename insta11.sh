@@ -1,59 +1,49 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail # 移除 -e 避免中間小報錯就中斷，改用邏輯判斷
 
-# --- 顏色定義 ---
-BLUE="\033[1;34m"
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-RED="\033[1;31m"
-RESET="\033[0m"
-
-# --- 輔助函式 ---
+# --- 顏色定義 (保持原樣) ---
+BLUE="\033[1;34m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; RESET="\033[0m"
 info() { echo -e "${BLUE}[INFO]${RESET} $1"; }
 ok() { echo -e "${GREEN}[OK]${RESET} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${RESET} $1"; }
 err() { echo -e "${RED}[ERROR]${RESET} $1"; }
-have_cmd() { command -v "$1" >/dev/null 2>&1; }
-
-install_apt_pkg() {
-    local pkg="$1"
-    if dpkg -s "$pkg" >/dev/null 2>&1; then
-        ok "$pkg already installed"
-    else
-        info "Installing $pkg"
-        sudo apt-get install -y "$pkg"
-        ok "$pkg installed"
-    fi
-}
 
 # --- 1. 系統更新與基礎工具安裝 ---
 info "Updating package list"
 sudo apt-get update
 
-info "Installing required packages (System & CLI Tools)"
+info "Installing required packages"
+# 這裡把 neofetch 從 apt 清單移除，改為後面手動安裝
 PACKAGES=(
-    git curl zsh tmux neofetch unzip
-    lsd htop bat ripgrep
-    nodejs npm pipx
-    xclip  # 新增：確保 tmux-yank 可以跟系統剪貼簿連動
+    git curl zsh tmux unzip lsd htop bat ripgrep nodejs npm pipx xclip
 )
 
 for pkg in "${PACKAGES[@]}"; do
-    install_apt_pkg "$pkg"
+    if dpkg -s "$pkg" >/dev/null 2>&1; then
+        ok "$pkg already installed"
+    else
+        sudo apt-get install -y "$pkg" && ok "$pkg installed" || warn "Failed to install $pkg"
+    fi
 done
 
-# --- 2. 安裝 Nerd Fonts (解決圖示問號問題) ---
+# --- 【新增】手動安裝 Neofetch 執行檔 ---
+if ! command -v neofetch >/dev/null 2>&1; then
+    info "Downloading Neofetch from GitHub (Kali repo fallback)..."
+    sudo curl -fLo /usr/local/bin/neofetch https://raw.githubusercontent.com/dylanaraps/neofetch/master/neofetch
+    sudo chmod +x /usr/local/bin/neofetch
+    ok "Neofetch binary installed"
+fi
+
+# --- 2. 安裝 Nerd Fonts (保持原樣) ---
 FONT_DIR="${HOME}/.local/share/fonts"
-if [ ! -d "$FONT_DIR" ] || [ ! -f "$FONT_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
+if [ ! -f "$FONT_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
     info "Installing JetBrainsMono Nerd Font..."
     mkdir -p "$FONT_DIR"
     curl -fLO https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/JetBrainsMono.tar.xz
     tar -xf JetBrainsMono.tar.xz -C "$FONT_DIR"
     rm JetBrainsMono.tar.xz
     fc-cache -fv >/dev/null
-    ok "Nerd Font installed successfully"
-else
-    ok "Nerd Font already exists"
+    ok "Nerd Font installed"
 fi
 
 # --- 3. 建立軟連結 ---
@@ -67,57 +57,39 @@ ln -sf "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
 ln -sf "$DOTFILES_DIR/.tmux_status.sh" "$HOME/.tmux_status.sh"
 ln -sf "$DOTFILES_DIR/.bashrc" "$HOME/.bashrc"
 
-ok "All symbolic links created from $DOTFILES_DIR"
+# 【關鍵】連結你的 neofetch 設定資料夾
+mkdir -p "$HOME/.config"
+ln -sf "$DOTFILES_DIR/neofetch" "$HOME/.config/neofetch"
 
-# --- 4. 處理 Oh My Zsh ---
+ok "All symbolic links created"
+
+# --- 4. 處理 Oh My Zsh (保持原樣) ---
 if [ ! -d "${HOME}/.oh-my-zsh" ]; then
-    info "Installing Oh My Zsh (KEEP_ZSHRC=yes to protect your symlink)"
     KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    ok "Oh My Zsh base installed"
-else
-    ok "Oh My Zsh directory already exists"
 fi
 
-# --- 5. 安裝 Powerlevel10k 主題 ---
-ZSH_CUSTOM="${HOME}/.oh-my-zsh/custom"
-P10K_DIR="${ZSH_CUSTOM}/themes/powerlevel10k"
+# --- 5. 安裝 Powerlevel10k 主題 (採用穩健路徑) ---
+P10K_DIR="${HOME}/.oh-my-zsh/custom/themes/powerlevel10k"
 if [ ! -d "$P10K_DIR" ]; then
-    info "Cloning Powerlevel10k theme"
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
-    ok "Powerlevel10k ready"
-else
-    info "Powerlevel10k already exists"
-    git -C "$P10K_DIR" pull --ff-only || warn "P10k update failed"
-fi
-
-# --- 6. 檔案權限處理 ---
-if [ -f "$DOTFILES_DIR/.tmux_status.sh" ]; then
-    info "Ensuring executable permission for .tmux_status.sh"
-    chmod +x "$DOTFILES_DIR/.tmux_status.sh"
 fi
 
 # --- 6.5 處理 Tmux Plugin Manager (TPM) ---
 TPM_DIR="${HOME}/.tmux/plugins/tpm"
 if [ ! -d "$TPM_DIR" ]; then
-    info "Installing Tmux Plugin Manager (TPM)..."
     git clone https://github.com/tmux-plugins/tpm "$TPM_DIR"
-    ok "TPM installed"
-    
-    # 自動安裝插件 (避免手動按 Prefix + I)
-    info "Installing tmux plugins via TPM..."
-    bash "$TPM_DIR/bin/install_plugins"
-    ok "Tmux plugins installed"
-else
-    ok "TPM directory already exists"
 fi
 
-# --- 7. 最終檢查與清理 ---
-echo
-ok "Core dotfiles environment setup finished!"
-info "To apply Zsh changes immediately, run: exec zsh"
-info "Remember to set your Terminal Font to 'JetBrainsMono Nerd Font'!"
+info "Refreshing tmux config & installing plugins..."
+tmux start-server
+tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+bash "$TPM_DIR/bin/install_plugins"
+ok "Tmux environment ready"
 
+# --- 7. 最終檢查 ---
 if [ "$SHELL" != "$(which zsh)" ]; then
-    info "Changing default shell to zsh..."
     sudo chsh -s "$(which zsh)" "$USER"
 fi
+
+ok "Dotfiles environment setup finished!"
+info "Please run: exec zsh"
