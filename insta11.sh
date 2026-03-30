@@ -86,6 +86,29 @@ tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
 bash "$TPM_DIR/bin/install_plugins"
 ok "Tmux environment ready"
 
+# --- btop Installation Block (The Simple & Stable Way) ---
+echo "────── Installing btop via APT ──────"
+
+# 檢查是否已安裝，沒安裝就補上
+if ! command -v btop &> /dev/null; then
+    sudo apt update
+    sudo apt install -y btop
+    echo "btop installed successfully."
+else
+    echo "btop is already installed."
+fi
+
+# 自動幫你建立設定檔目錄並寫入「東邪配置」
+mkdir -p ~/.config/btop
+cat << EOF > ~/.config/btop/btop.conf
+color_theme = "HotPurpleTrafficLight"
+graph_symbol = "braille"
+update_ms = 1000
+EOF
+
+echo "Aesthetic config applied: HotPurpleTrafficLight + Braille"
+echo "─────────────────────────────────────────"
+
 # --- 7. 最終檢查 ---
 if [ "$SHELL" != "$(which zsh)" ]; then
     sudo chsh -s "$(which zsh)" "$USER"
