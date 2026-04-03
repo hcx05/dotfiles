@@ -123,4 +123,3 @@ alias vim="nvim"
 alias cat='batcat -p'
 alias bcat='batcat'
 
-alias htb-start='sshuttle -r root@htb 10.10.10.0/24'
