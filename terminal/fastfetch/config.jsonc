@@ -1,0 +1,109 @@
+// Kali dragon (cyan) rendered as a REAL PNG via the Kitty graphics protocol
+// -- not ASCII/Unicode art. Requires Kitty (or another kitty-graphics-
+// protocol terminal); run with `fastfetch` inside kitty to see it.
+// Image source: ~/Pictures/dragon.png -- derived from
+// ~/Downloads/pngwing.com.png (the stock Kali dragon badge PNG), with the
+// light-gray disc backing/drop-shadow removed and the silhouette recolored
+// to #00F0FF to match this rice's cyan accent (see ~/.config/rice/theme.conf
+// ACCENT_ALT). Regenerate it from the original with the same threshold/
+// recolor script if you swap in a different source image.
+//
+// logo.type is "kitty-icat" (not "kitty"): fastfetch's own built-in "kitty"
+// writer emits the raw graphics protocol with no tmux passthrough DCS
+// wrapper, so it silently no-ops inside tmux even with `allow-passthrough
+// on` in tmux.conf. "kitty-icat" shells out to `kitten icat`, which detects
+// $TMUX itself and wraps the escape sequence correctly -- confirmed via
+// `script -qc 'kitten icat ...'` capturing a `\ePtmux;...` wrapper that the
+// plain "kitty" type never produced.
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "kitty-icat",
+        "source": "~/Pictures/dragon.png",
+        "width": 34,
+        "height": 18,
+        "padding": {
+            "top": 1,
+            "right": 3
+        }
+    },
+    "display": {
+        "separator": " "
+    },
+    "modules": [
+        "break",
+        {
+            "type": "title",
+            "color": {
+                "user": "cyan",
+                "at": "white",
+                "host": "cyan"
+            }
+        },
+        "break",
+        {
+            "type": "os",
+            "key": " OS",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "kernel",
+            "key": "│ ├",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "wm",
+            "key": "│ ├",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "terminal",
+            "key": "│ └",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "uptime",
+            "key": " UP",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "packages",
+            "key": " PKG",
+            "keyColor": "cyan"
+        },
+        {
+            "type": "shell",
+            "key": " SHELL",
+            "keyColor": "cyan"
+        },
+        "break",
+        {
+            "type": "cpu",
+            "key": " CPU",
+            "keyColor": "magenta"
+        },
+        {
+            "type": "gpu",
+            "key": " GPU",
+            "keyColor": "magenta"
+        },
+        {
+            "type": "memory",
+            "key": " MEM",
+            "keyColor": "magenta"
+        },
+        {
+            "type": "disk",
+            "key": " DISK",
+            "keyColor": "magenta"
+        },
+        "break",
+        {
+            "type": "localip",
+            "key": " IP",
+            "keyColor": "green"
+        },
+        "break",
+        "colors"
+    ]
+}

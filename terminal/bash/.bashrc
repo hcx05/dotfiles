@@ -155,5 +155,6 @@ if ! shopt -oq posix; then
   fi
 fi
 
-# Created by `pipx` on 2026-04-01 11:50:39
-export PATH="$PATH:/root/.local/bin"
+
+# Enables autocompletion of options for bashfuscator
+eval "$(/usr/bin/register-python-argcomplete bashfuscator)"

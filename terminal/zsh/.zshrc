@@ -123,3 +123,7 @@ alias vim="nvim"
 alias cat='batcat -p'
 alias bcat='batcat'
 
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOROOT/bin:$GOPATH/bini
+alias penenv="source ~/Arsenal/pen-venv/bin/activate"

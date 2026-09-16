@@ -1,0 +1,109 @@
+/* ============================================================================
+ * Rofi config -- futuristic command palette
+ * Colors come from ~/.config/rofi/colors.rasi, generated from
+ * ~/.config/rice/theme.conf by ~/.config/rice/apply-theme.sh.
+ * This file is safe to hand-edit for layout/behavior.
+ * ============================================================================ */
+
+@import "~/.config/rofi/colors.rasi"
+
+configuration {
+    modi:                       "drun,window,run,ssh";
+    show-icons:                 true;
+    icon-theme:                 "candy-icons";
+    display-drun:               " Apps";
+    display-window:             " Windows";
+    display-run:                " Run";
+    drun-display-format:        "{name}";
+    font:                       "JetBrainsMono Nerd Font 11";
+    disable-history:            false;
+    hover-select:               true;
+    me-select-entry:            "MousePrimary";
+    me-accept-entry:            "MouseDPrimary";
+}
+
+* {
+    background-color:  transparent;
+    text-color:         @fg;
+    border-color:       @border-active;
+}
+
+window {
+    location:        center;
+    anchor:           center;
+    width:            600px;
+    background-color: @bg-trans;
+    border:           1px;
+    border-radius:    10px;
+    padding:          0px;
+}
+
+mainbox {
+    background-color: transparent;
+    padding:           14px;
+    children:          [ "inputbar", "message", "listview" ];
+    spacing:           10px;
+}
+
+inputbar {
+    background-color: @bg-alt;
+    text-color:         @fg;
+    border-radius:      8px;
+    padding:             10px 14px;
+    spacing:             8px;
+    children:            [ "prompt", "entry" ];
+}
+
+prompt {
+    text-color: @accent;
+}
+
+entry {
+    text-color:        @fg;
+    placeholder:        "Search...";
+    placeholder-color:  @fg-alt;
+}
+
+message {
+    background-color: @bg-alt;
+    border-radius:       8px;
+    padding:              8px 12px;
+    text-color:           @fg-alt;
+}
+
+listview {
+    background-color: transparent;
+    columns:            1;
+    lines:               8;
+    spacing:             4px;
+    cycle:               true;
+    dynamic:             true;
+    layout:              vertical;
+}
+
+element {
+    background-color: transparent;
+    text-color:         @fg;
+    border-radius:      8px;
+    padding:             8px 10px;
+    spacing:             10px;
+}
+
+element normal.normal {
+    background-color: transparent;
+    text-color:         @fg;
+}
+
+element selected.normal {
+    background-color: @accent;
+    text-color:         @bg;
+}
+
+element-icon {
+    size:      1.1em;
+    vertical-align: 0.5;
+}
+
+element-text {
+    vertical-align: 0.5;
+}

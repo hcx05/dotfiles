@@ -15,7 +15,7 @@ sudo apt-get update
 info "Installing required packages"
 # 這裡把 neofetch 從 apt 清單移除，改為後面手動安裝
 PACKAGES=(
-    git curl zsh tmux unzip lsd htop bat ripgrep nodejs npm pipx xclip
+    git curl zsh tmux unzip lsd htop bat ripgrep nodejs npm pipx xclip fastfetch
 )
 
 for pkg in "${PACKAGES[@]}"; do
@@ -47,19 +47,32 @@ if [ ! -f "$FONT_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
 fi
 
 # --- 3. 建立軟連結 ---
+# Layout: dotfiles/terminal/{zsh,tmux,bash,nvim,fastfetch}/ + dotfiles/i3/{i3,polybar,picom,rofi,dunst,rice}/
 info "Setting up symbolic links for dotfiles..."
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 連結 Zsh / P10k / Tmux / Bash
-ln -sf "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
-ln -sf "$DOTFILES_DIR/.p10k.zsh" "$HOME/.p10k.zsh"
-ln -sf "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
-ln -sf "$DOTFILES_DIR/.tmux_status.sh" "$HOME/.tmux_status.sh"
-ln -sf "$DOTFILES_DIR/.bashrc" "$HOME/.bashrc"
+# 連結 Zsh / P10k / Tmux / Bash (terminal/)
+ln -sf "$DOTFILES_DIR/terminal/zsh/.zshrc" "$HOME/.zshrc"
+ln -sf "$DOTFILES_DIR/terminal/zsh/.p10k.zsh" "$HOME/.p10k.zsh"
+ln -sf "$DOTFILES_DIR/terminal/tmux/.tmux.conf" "$HOME/.tmux.conf"
+ln -sf "$DOTFILES_DIR/terminal/tmux/.tmux_status.sh" "$HOME/.tmux_status.sh"
+ln -sf "$DOTFILES_DIR/terminal/bash/.bashrc" "$HOME/.bashrc"
 
-# 【關鍵】連結你的 neofetch 設定資料夾
 mkdir -p "$HOME/.config"
+
+# nvim (terminal/nvim)
+ln -sf "$DOTFILES_DIR/terminal/nvim" "$HOME/.config/nvim"
+
+# fastfetch -- cyan Kali-dragon logo config, see terminal/fastfetch/config.jsonc
+ln -sf "$DOTFILES_DIR/terminal/fastfetch" "$HOME/.config/fastfetch"
+
+# 【關鍵】連結你的 neofetch 設定資料夾 (legacy fallback binary, kept for compat)
 ln -sf "$DOTFILES_DIR/neofetch" "$HOME/.config/neofetch"
+
+# i3 rice (i3/i3, i3/polybar, i3/picom, i3/rofi, i3/dunst, i3/rice)
+for d in i3 polybar picom rofi dunst rice; do
+    ln -sf "$DOTFILES_DIR/i3/$d" "$HOME/.config/$d"
+done
 
 ok "All symbolic links created"
 
@@ -67,6 +80,11 @@ ok "All symbolic links created"
 if [ ! -d "${HOME}/.oh-my-zsh" ]; then
     KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 fi
+
+# 【關鍵】連結 fastfetch 龍圖示用的 neofetch() sched wrapper -- 這個 oh-my-zsh
+# custom snippet必須在 oh-my-zsh 裝好、~/.oh-my-zsh/custom 存在之後才能連結
+mkdir -p "${HOME}/.oh-my-zsh/custom"
+ln -sf "$DOTFILES_DIR/terminal/zsh/fastfetch-dragon.zsh" "${HOME}/.oh-my-zsh/custom/fastfetch-dragon.zsh"
 
 # --- 5. 安裝 Powerlevel10k 主題 (採用穩健路徑) ---
 P10K_DIR="${HOME}/.oh-my-zsh/custom/themes/powerlevel10k"
