@@ -1,12 +1,18 @@
-// Kali dragon (cyan) rendered as a REAL PNG via the Kitty graphics protocol
-// -- not ASCII/Unicode art. Requires Kitty (or another kitty-graphics-
-// protocol terminal); run with `fastfetch` inside kitty to see it.
-// Image source: ~/Pictures/dragon.png -- derived from
-// ~/Downloads/pngwing.com.png (the stock Kali dragon badge PNG), with the
-// light-gray disc backing/drop-shadow removed and the silhouette recolored
-// to #00F0FF to match this rice's cyan accent (see ~/.config/rice/theme.conf
-// ACCENT_ALT). Regenerate it from the original with the same threshold/
-// recolor script if you swap in a different source image.
+// Kali dragon rendered as a REAL PNG via the Kitty graphics protocol -- not
+// ASCII/Unicode art. Requires Kitty (or another kitty-graphics-protocol
+// terminal); run with `fastfetch` inside kitty to see it.
+// Image source: ~/Pictures/dragon.png -> dragon.png in this same directory,
+// which is itself a symlink to whichever recolor matches the active rice
+// preset (dragon-purple.png / dragon-green.png) -- repointed automatically
+// by ~/.config/rice/switch-theme.sh alongside theme.conf, so the dragon
+// always matches the current ACCENT color. Original silhouette derived
+// from ~/Downloads/pngwing.com.png (the stock Kali dragon badge PNG), with
+// the light-gray disc backing/drop-shadow removed; each color variant is
+// just a flat RGB swap over that same alpha mask (see the recolor one-liner
+// in the switch-theme.sh commit, or dragon-purple.png's original #00F0FF /
+// dragon-green.png's #00FF41). Regenerate dragon-purple.png from the
+// original source with the same threshold script if you ever swap in a
+// different base image, then re-derive the other color variants from it.
 //
 // logo.type is "kitty-icat" (not "kitty"): fastfetch's own built-in "kitty"
 // writer emits the raw graphics protocol with no tmux passthrough DCS
