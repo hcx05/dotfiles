@@ -119,6 +119,9 @@ bindsym $mod+Tab exec rofi -show window -config ~/.config/rofi/config.rasi
 bindsym $mod+v exec --no-startup-id python3 /home/kali/.config/rice/clipboard/clipmenu.py
 bindsym $mod+Shift+q kill
 bindsym $mod+Shift+e exec i3-nagbar -t warning -m 'Exit i3? This ends your session.' -B 'Yes, exit' 'i3-msg exit'
+# Power menu -- same rofi menu (Lock/Logout/Suspend/Reboot/Shut Down) as
+# clicking the icon at the top-left of the polybar bar.
+bindsym $mod+Shift+p exec --no-startup-id ~/.config/rofi/scripts/powermenu.sh
 
 # ---------------------------------------------------------------------------
 # Alt+Tab -- MRU window cycling (Windows/XFCE-style: hold Alt, tap Tab to

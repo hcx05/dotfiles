@@ -64,7 +64,12 @@ frame-opacity = 1.0;
 inactive-opacity-override = false;
 
 opacity-rule = [
-  "@@TRANSPARENCY_PCT@@:class_g = 'kitty'",
+  # kitty intentionally excluded here -- it manages its own background
+  # transparency natively (background_opacity in colors.conf). Also
+  # forcing picom's window-level opacity on top of that double-applies
+  # transparency (kitty's semi-transparent background gets blended again
+  # by picom), which is what produced the muddy extra-green haze over the
+  # terminal background. Kitty's own opacity is untouched by this.
   "@@TRANSPARENCY_PCT@@:class_g = 'Rofi'",
   "@@BAR_TRANSPARENCY_PCT@@:class_g = 'Polybar'",
   "90:class_g = 'Dunst'",
