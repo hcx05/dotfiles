@@ -158,3 +158,15 @@ fi
 
 # Enables autocompletion of options for bashfuscator
 eval "$(/usr/bin/register-python-argcomplete bashfuscator)"
+
+# I3SOCK points at i3's IPC socket, named after its PID. A shell that
+# outlives the X session it was started under (e.g. one kept alive by a
+# detached tmux server across a logout/login) keeps this exported with the
+# OLD i3 process's path baked in forever -- env vars don't self-refresh.
+# Checking the path is a live socket isn't enough to catch this: i3 doesn't
+# clean up the old socket FILE on exit, so a dead one still passes a `-S`
+# test and i3-msg/i3ipc still fail to connect to it. Just always unset it
+# instead -- i3 tooling falls back to its own live discovery (the
+# I3_SOCKET_PATH property on the X root window) when the var isn't set, so
+# there's no downside to never trusting an inherited value.
+unset I3SOCK

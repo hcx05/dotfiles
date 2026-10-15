@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Toggle-maximize for the focused FLOATING window -- fills the usable
-screen area between the top polybar bar and the bottom taskbar, WITHOUT
-covering either (unlike i3's `fullscreen toggle`, which covers the whole
-output including both bars). Press again to restore the previous size and
-position.
+screen area below the top polybar bar, WITHOUT covering it (unlike i3's
+`fullscreen toggle`, which covers the whole output including that bar).
+Press again to restore the previous size and position.
 
-Bar heights are read from ~/.config/polybar/config.ini (top bar's `height`
-under [bar/mainbar], bottom bar's under [bar/taskbar]) so this doesn't
-silently drift out of sync if those change later.
+Top bar height is read from ~/.config/polybar/config.ini ([bar/mainbar]'s
+`height`) so this doesn't silently drift out of sync if that changes later.
+There is no bottom bar to avoid (the taskbar bar was removed), so the
+window fills all the way down to the screen edge.
 """
 import i3ipc
 import json
@@ -64,7 +64,7 @@ def main():
         return
 
     top = bar_height("bar/mainbar")
-    bottom = bar_height("bar/taskbar")
+    bottom = 0  # no bottom bar to avoid anymore
 
     if wid in state:
         # restore

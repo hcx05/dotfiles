@@ -4,9 +4,10 @@
 i3 has no built-in "hold Alt, tap Tab to cycle, release Alt to select"
 behavior -- this implements it using i3ipc:
 
-  daemon  Run persistently (started once at i3 startup via exec). Subscribes
-          to window::focus events and maintains an MRU-ordered history of
-          window ids in a state file.
+  daemon  Run persistently (started via exec_always, so it also survives an
+          i3 reload/restart -- see the flock guard at the top of daemon()).
+          Subscribes to window::focus events and maintains an MRU-ordered
+          history of window ids in a state file.
   step    Called from the "altTab" i3 mode each time Tab is pressed while
           Alt is held. Advances a cycle position and focuses that window.
   reset   Called when Alt is released (mode exits back to "default"). Moves
@@ -25,15 +26,27 @@ once the user has actually landed on their final choice.
 import sys
 import os
 import json
+import fcntl
 import i3ipc
 
 STATE_FILE = os.path.expanduser("~/.cache/i3-alttab-history.json")
 CYCLE_FILE = os.path.expanduser("~/.cache/i3-alttab-cycle")
 TARGET_FILE = os.path.expanduser("~/.cache/i3-alttab-target")
+LOCK_FILE = os.path.expanduser("~/.cache/i3-alttab-daemon.lock")
 MAX_HISTORY = 20
 
 
 def daemon():
+    # Single-instance guard (same pattern as clipd.py): started via
+    # exec_always, so i3 re-runs this line on every reload/restart, not
+    # just the first startup -- without this, each one would stack another
+    # daemon on top instead of replacing it.
+    lock_fd = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit(0)  # another instance is already running -- quietly exit
+
     i3 = i3ipc.Connection()
     history = []
     if os.path.exists(STATE_FILE):
