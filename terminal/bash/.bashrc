@@ -159,6 +159,17 @@ fi
 # Enables autocompletion of options for bashfuscator
 eval "$(/usr/bin/register-python-argcomplete bashfuscator)"
 
+# ~/Arsenal 工具說明 (已透過 ~/.local/bin 的 symlink/wrapper 加入 PATH，可直接執行)
+#   chisel            - TCP/UDP tunnel over HTTP           (~/Arsenal/chisel/chisel_prod)
+#   dehashed          - DeHashed API 搜尋 CLI               (~/Arsenal/deHaSHed/dehashed_cli.py)
+#   finalrecon        - 網站偵察/footprinting              (~/Arsenal/FinalRecon/finalrecon.py)
+#   username-anarchy  - 依姓名產生帳號猜測清單              (~/Arsenal/username-anarchy/username-anarchy)
+#   xsstrike          - XSS 偵測/利用掃描                   (~/Arsenal/XSStrike/xsstrike.py)
+#   xxeinjector       - XXE 自動化注入/檔案讀取             (~/Arsenal/XXEinjector/XXEinjector.rb)
+#   zap               - OWASP ZAP 啟動器                    (~/Arsenal/ZAP_2.17.0/zap.sh)
+#   reconspider       - Scrapy 爬蟲式網站偵察 (需 scrapy)   (~/Arsenal/Scrapy/ReconSpider.py)
+alias penenv="source ~/Arsenal/pen-venv/bin/activate"
+
 # I3SOCK points at i3's IPC socket, named after its PID. A shell that
 # outlives the X session it was started under (e.g. one kept alive by a
 # detached tmux server across a logout/login) keeps this exported with the
