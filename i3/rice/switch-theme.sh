@@ -69,6 +69,17 @@ fi
 
 # Repaint everything live instead of making the user log out/in.
 #
+# Wait for a pkill'd pattern to actually be gone (up to ~2s) instead of a
+# blind sleep -- a killed process isn't guaranteed reaped by the time the
+# next line runs, and relaunching too early is exactly what produces
+# duplicates.
+wait_gone() {
+    for _ in $(seq 1 20); do
+        pgrep -f "$1" >/dev/null 2>&1 || return 0
+        sleep 0.1
+    done
+}
+
 # Polybar + dock: run launch.sh exactly once, here. NOTE `i3-msg reload`
 # does NOT re-run exec_always lines (only a full restart does -- verified
 # on i3 4.23: polybar's PID is unchanged across a reload). Color-only
@@ -83,18 +94,34 @@ fi
 # any bar mid-way through its own --reload self-restart.
 i3-msg reload >/dev/null
 bash "$HOME/.config/polybar/launch.sh" >/dev/null 2>&1 9>&- < /dev/null
-bash "$HOME/.config/i3/set-wallpaper.sh" 9>&- &
-
-# Wait for a pkill'd pattern to actually be gone (up to ~2s) instead of a
-# blind sleep -- a killed process isn't guaranteed reaped by the time the
-# next line runs, and relaunching too early is exactly what produces
-# duplicates.
-wait_gone() {
-    for _ in $(seq 1 20); do
-        pgrep -f "$1" >/dev/null 2>&1 || return 0
-        sleep 0.1
+# Restart the window-geometry daemons too. They're flock-guarded, so neither
+# a reload nor $mod+Shift+r replaces a running one -- after a `git pull`
+# the OLD code kept sizing new windows (observed: full-width windows under
+# mono's dock until the next logout). They read layout.json fresh on every
+# window, so this is only about picking up code changes.
+# PIDs of python3 processes (only -- not e.g. a shell or grep whose command
+# line merely mentions the script) whose command line matches $1.
+python_pids() {
+    for p in $(pgrep -u "$UID" -f "$1"); do
+        case "$(cat "/proc/$p/comm" 2>/dev/null)" in python3*) echo "$p" ;; esac
     done
 }
+for daemon in default-size.py fix-maximized-on-output-change.py; do
+    pattern="/\.config/i3/$daemon daemon"
+    pids=$(python_pids "$pattern")
+    [ -n "$pids" ] && { kill $pids 2>/dev/null || true; }
+    for _ in $(seq 1 20); do
+        [ -z "$(python_pids "$pattern")" ] && break
+        sleep 0.1
+    done
+    setsid nohup python3 "$HOME/.config/i3/$daemon" daemon \
+        >/dev/null 2>&1 9>&- < /dev/null &
+done
+# Already-open windows keep the geometry they got under the OLD layout (e.g.
+# full width from green/purple, now under mono's dock) -- re-fit them.
+python3 "$HOME/.config/i3/fix-maximized-on-output-change.py" once >/dev/null 2>&1 9>&- < /dev/null || true
+bash "$HOME/.config/i3/set-wallpaper.sh" 9>&- &
+
 
 pkill picom 2>/dev/null || true
 wait_gone "picom --config"

@@ -27,9 +27,16 @@ else
 fi
 
 DOCK="$HOME/.config/rice/dock/dock.py"
-pkill -u "$UID" -f "python3 $DOCK" 2>/dev/null
+# only python3 processes -- not a shell/grep that merely mentions dock.py
+dock_pids() {
+    for p in $(pgrep -u "$UID" -f "python3 $DOCK"); do
+        case "$(cat "/proc/$p/comm" 2>/dev/null)" in python3*) echo "$p" ;; esac
+    done
+}
+pids=$(dock_pids)
+[ -n "$pids" ] && kill $pids 2>/dev/null
 for _ in $(seq 1 20); do
-    pgrep -u "$UID" -f "python3 $DOCK" >/dev/null || break
+    [ -z "$(dock_pids)" ] && break
     sleep 0.1
 done
 if [ "${LAYOUT:-classic}" = "dock" ]; then

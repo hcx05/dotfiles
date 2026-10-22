@@ -115,7 +115,49 @@ def on_output(i3, _event):
     threading.Thread(target=_retry_fix, args=(i3,), daemon=True).start()
 
 
+def fit_other_floating_windows(i3):
+    """Trim floating windows that are NOT in the maximized state but still
+    reach into the bar/dock strips (e.g. sized by hand under a previous
+    theme) so they end inside the usable area. Windows already clear of the
+    strips are left exactly as they are."""
+    state = {}
+    try:
+        state = json.load(open(STATE_FILE))
+    except Exception:
+        pass
+    tree = i3.get_tree()
+    outputs = i3.get_outputs()
+    for ws in tree.workspaces():
+        if ws.name == "__i3_scratch":
+            continue
+        out_rect = next((o.rect for o in outputs if o.name == ws.ipc_data.get("output")), None)
+        if out_rect is None:
+            continue
+        ux, uy, uw, uh = maximized_rect(out_rect)
+        for fl in ws.floating_nodes:
+            for win in fl.leaves():
+                if win.window is None or str(win.window) in state:
+                    continue
+                r = fl.rect  # the floating container -- what move/resize act on
+                x, y = max(r.x, ux), max(r.y, uy)
+                right, bottom = min(r.x + r.width, ux + uw), min(r.y + r.height, uy + uh)
+                if (x, y, right, bottom) == (r.x, r.y, r.x + r.width, r.y + r.height):
+                    continue  # already clear of the bar/dock
+                i3.command(f'[id={win.window}] move position {x} {y}')
+                i3.command(f'[id={win.window}] resize set {right - x} {bottom - y}')
+
+
 def main():
+    # `once`: re-fit every window to the CURRENT layout and exit -- run by
+    # ~/.config/rice/switch-theme.sh, since switching between the classic
+    # and dock layouts moves the bar/dock strips under already-open windows
+    # and no output event fires for that. No lock: it's not the daemon.
+    if sys.argv[1:] == ["once"]:
+        i3 = i3ipc.Connection()
+        fix_maximized_windows(i3)
+        fit_other_floating_windows(i3)
+        return
+
     # Single-instance guard (same pattern as clipd.py/alt-tab.py/
     # default-size.py): started via exec_always, so i3 re-runs this line on
     # every reload/restart, not just the first startup -- without this,
