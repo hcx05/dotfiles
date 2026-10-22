@@ -18,12 +18,11 @@ SUSPEND="  $ICON_SUSPEND  Suspend"
 REBOOT="  $ICON_REBOOT  Reboot"
 POWEROFF="  $ICON_POWEROFF  Shut Down"
 
-# Theme entry cycles to the NEXT preset after the active one, in name order
-# (green -> mono -> purple -> green ...) -- label names it directly
-# ("Theme: Mono") instead of a generic "Switch Theme" so you know what one
-# click does before you click it. Reads the current preset from the
-# theme.conf symlink (see switch-theme.sh), not from a separate state file,
-# so it can never drift out of sync.
+# Theme entry opens a second list with EVERY preset (theme-*.conf), the
+# active one ticked -- pick any of them directly instead of stepping through
+# them in order. The label shows the active preset. Current preset is read
+# from the theme.conf symlink (see switch-theme.sh), not from a separate
+# state file, so it can never drift out of sync.
 CURRENT_THEME=$(basename "$(readlink -f "$HOME/.config/rice/theme.conf")")
 CURRENT_THEME="${CURRENT_THEME#theme-}"
 CURRENT_THEME="${CURRENT_THEME%.conf}"
@@ -33,16 +32,9 @@ for f in "$HOME/.config/rice"/theme-*.conf; do
     base="${base#theme-}"
     PRESETS+=("${base%.conf}")
 done
-NEXT_THEME=""
-for i in "${!PRESETS[@]}"; do
-    if [ "${PRESETS[$i]}" = "$CURRENT_THEME" ]; then
-        NEXT_THEME="${PRESETS[$(( (i + 1) % ${#PRESETS[@]} ))]}"
-        break
-    fi
-done
-# active preset not found among theme-*.conf -- just offer the first one
-[ -z "$NEXT_THEME" ] && NEXT_THEME="${PRESETS[0]}"
-THEME="  $ICON_THEME  Theme: ${NEXT_THEME^}"
+THEME="  $ICON_THEME  Theme: ${CURRENT_THEME^}"
+ICON_CHECK=$(python3 -c "print(chr(0xF00C))")   # fa-check, verified against installed font
+ICON_CIRCLE=$(python3 -c "print(chr(0xF10C))")  # fa-circle_o, verified against installed font
 
 ROFI="rofi -dmenu -config $HOME/.config/rofi/config.rasi -theme-str 'window {width: 260px;} listview {lines: 6;}'"
 
@@ -65,9 +57,22 @@ confirm() {
 case "$choice" in
     "$LOCK")   betterlockscreen -l dimblur ;;
     "$THEME")
-        echo "$(date '+%F %T') dispatching switch-theme.sh $NEXT_THEME" >> /tmp/powermenu-debug.log
-        if [ -n "$NEXT_THEME" ]; then
-            nohup "$HOME/.config/rice/switch-theme.sh" "$NEXT_THEME" >>/tmp/switch-theme.log 2>&1 &
+        labels=()
+        for name in "${PRESETS[@]}"; do
+            if [ "$name" = "$CURRENT_THEME" ]; then
+                labels+=("  $ICON_CHECK  ${name^}")
+            else
+                labels+=("  $ICON_CIRCLE  ${name^}")
+            fi
+        done
+        picked=$(printf '%s\n' "${labels[@]}" | eval "$ROFI" -p "Theme")
+        target=""
+        for i in "${!labels[@]}"; do
+            [ "${labels[$i]}" = "$picked" ] && target="${PRESETS[$i]}"
+        done
+        echo "$(date '+%F %T') theme picked=[$picked] target=[$target]" >> /tmp/powermenu-debug.log
+        if [ -n "$target" ] && [ "$target" != "$CURRENT_THEME" ]; then
+            nohup "$HOME/.config/rice/switch-theme.sh" "$target" >>/tmp/switch-theme.log 2>&1 &
         fi
         ;;
     "$LOGOUT")   i3-msg exit ;;

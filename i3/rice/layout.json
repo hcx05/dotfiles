@@ -4,7 +4,7 @@
   "reserved": {"top": 30, "right": 0, "bottom": 0, "left": 0},
   "window_margin": 4,
   "edge_gap": 8,
-  "dock": {"width": 64, "icon_size": 40},
+  "dock": {"width": 32, "icon_size": 20},
   "colors": {
     "background": "#000C02", "background_alt": "#001F0A",
     "foreground": "#39FF14", "foreground_alt": "#4E9967",

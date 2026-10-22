@@ -4,7 +4,7 @@
 
   - pinned apps (APPS below), then any other running apps after a
     separator, centered vertically; "Show Applications" (rofi drun) at
-    the bottom
+    the bottom -- all drawn as flat white Nerd Font glyphs
   - a dot per open window (up to 3) on the screen-edge side of each icon,
     and a highlight on the app that has focus
   - left click: launch if not running; focus it if it is (switching
@@ -39,38 +39,41 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 import i3ipc  # noqa: E402
 
 LAYOUT_FILE = os.path.expanduser("~/.config/rice/layout.json")
 LOCK_FILE = os.path.expanduser("~/.cache/rice-dock.lock")
 HOME = os.path.expanduser("~")
-ICON_THEME = "candy-icons"  # same icon theme rofi uses (rofi/config.rasi)
 GLYPH_FONT = "JetBrainsMono Nerd Font"
 
-# Pinned apps, top to bottom -- same set as polybar's quicklaunch.sh. To pin
-# another one, add a line:
-#   (tooltip name, [icon names to try, in order], WM_CLASS regex (matched
-#    case-insensitively against class and instance), fallback Nerd Font
-#    codepoint if no icon is found, shell command)
+# Pinned apps, top to bottom -- same set as polybar's quicklaunch.sh. Icons
+# are flat white Nerd Font glyphs (same style as the top bar's), not icon-
+# theme images. To pin another one, add a line:
+#   (tooltip name, WM_CLASS regex (matched case-insensitively against class
+#    and instance), Nerd Font codepoint, shell command)
+# Check a new codepoint against the installed font first, e.g.
+#   fc-list ":charset=f1673" family | grep "JetBrainsMono Nerd Font"
+# -- a missing glyph silently renders as nothing.
 APPS = [
-    ("Firefox", ["firefox-esr", "firefox"], r"firefox", 0xF269, "firefox-esr"),
-    ("Terminal", ["kitty", "utilities-terminal"], r"^kitty$", 0xF120,
-     f"kitty --config {HOME}/.config/kitty/kitty.conf"),
-    ("Burp Suite", ["kali-burpsuite", "burpsuite"], r"burp", 0xF188, "burpsuite"),
-    ("ZAP", ["kali-zaproxy", "zaproxy", "zap"], r"zap", 0xF0E7,
-     f"{HOME}/Arsenal/ZAP_2.17.0/zap.sh"),
-    ("Wireshark", ["org.wireshark.Wireshark", "wireshark", "kali-wireshark"], r"wireshark", 0xF002,
+    ("Firefox", r"firefox", 0xF269, "firefox-esr"),                        # fa-firefox
+    ("Terminal", r"^kitty$", 0xF120, f"kitty --config {HOME}/.config/kitty/kitty.conf"),  # fa-terminal
+    ("Burp Suite", r"burp", 0xF188, "burpsuite"),                          # fa-bug
+    ("ZAP", r"zap", 0xF0E7, f"{HOME}/Arsenal/ZAP_2.17.0/zap.sh"),          # fa-bolt
+    ("Wireshark", r"wireshark", 0xF1673,                                   # md-shark_fin
      "/usr/share/kali-menu/helper-scripts/wireshark.sh"),
-    ("Files", ["org.xfce.thunar", "Thunar", "system-file-manager"], r"^thunar$", 0xF07B, "thunar"),
-    ("Settings", ["org.xfce.settings.manager", "preferences-system"], r"xfce4-settings-manager", 0xF013,
-     "xfce4-settings-manager"),
+    ("Files", r"^thunar$", 0xF07B, "thunar"),                              # fa-folder
+    ("Settings", r"xfce4-settings-manager", 0xF013, "xfce4-settings-manager"),  # fa-cog
 ]
+OTHER_APP_GLYPH = 0xF2D0   # fa-window_maximize -- running apps that aren't pinned
+SHOW_APPS_GLYPH = 0xF003B  # md-apps (3x3 dots, like Ubuntu's Show Applications)
 SHOW_APPS_CMD = f"rofi -show drun -config {HOME}/.config/rofi/config.rasi"
+MORE_GLYPH = 0xF141        # fa-ellipsis_h -- "more windows" when the dock is full
+MORE_CMD = f"rofi -show window -config {HOME}/.config/rofi/config.rasi"
+MORE_KEY = "__more__"
 MAX_DOTS = 3
-SLOT_EXTRA = 12  # .app padding 4+4 + margin 2+2 around every icon (see css())
-MIN_ICON = 16    # icons never shrink below this when the dock gets crowded
+MIN_ICON = 12    # icons never shrink below this when the dock gets crowded
 Rect = collections.namedtuple("Rect", "x y width height")
 
 
@@ -91,20 +94,20 @@ def launch(cmd):
 
 def css(layout):
     c = layout["colors"]
-    # Button margin 6px + image margin 4px each side + 2px dock outline is
-    # what apply-theme.sh's DOCK_WIDTH (= icon + 24) assumes -- keep in sync.
+    # Dock outline 1px + button margin 2px + icon margin 3px on each side is
+    # what apply-theme.sh's DOCK_WIDTH (= icon + 12) assumes -- keep in sync.
     return f"""
     window {{ background-color: transparent; }}
     .dock {{
         background-color: {rgba(c["background"], layout["bar_transparency"])};
-        border: 2px solid {c["accent_alt"]};
-        border-radius: 14px;
-        padding: 8px 0;
+        border: 1px solid {c["accent_alt"]};
+        border-radius: 8px;
+        padding: 6px 0;
     }}
     .app {{
         background: none; background-color: transparent; background-image: none;
         border: none; box-shadow: none; outline: none; text-shadow: none;
-        border-radius: 10px; padding: 4px 0; margin: 2px 6px;
+        border-radius: 6px; padding: 3px 0; margin: 2px 2px;
         min-width: 0; min-height: 0;
     }}
     .app:hover {{ background-color: {c["background_alt"]}; }}
@@ -112,10 +115,10 @@ def css(layout):
         background-color: {c["background_alt"]};
         box-shadow: inset 0 0 0 1px {c["foreground_alt"]};
     }}
-    .dot {{ background-color: {c["foreground_alt"]}; border-radius: 2px; min-width: 4px; min-height: 4px; }}
+    .dot {{ background-color: {c["foreground_alt"]}; border-radius: 2px; min-width: 3px; min-height: 3px; }}
     .app.focused .dot {{ background-color: {c["accent"]}; }}
     .glyph {{ color: {c["foreground"]}; }}
-    separator {{ background-color: {c["border_inactive"]}; min-height: 1px; margin: 6px 14px; }}
+    separator {{ background-color: {c["border_inactive"]}; min-height: 1px; margin: 4px 6px; }}
     tooltip, tooltip.background {{
         background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; border-radius: 6px;
     }}
@@ -128,44 +131,15 @@ def css(layout):
     """
 
 
-def icon_widget(icon_names, glyph, size, extra_gicon=None):
-    """Gtk.Image from the first icon name the theme has, else a Nerd Font glyph."""
-    theme = Gtk.IconTheme.get_default()
-    info = None
-    for name in icon_names:
-        if name and theme.has_icon(name):
-            info = theme.lookup_icon(name, size, Gtk.IconLookupFlags.FORCE_SIZE)
-            if info:
-                break
-    if info is None and extra_gicon is not None:
-        info = theme.lookup_by_gicon(extra_gicon, size, Gtk.IconLookupFlags.FORCE_SIZE)
-    if info is not None:
-        try:
-            return Gtk.Image.new_from_pixbuf(info.load_icon())
-        except GLib.Error:
-            pass
+def icon_widget(glyph, size):
+    """A Nerd Font glyph in the theme's foreground color, sized to the icon."""
     label = Gtk.Label(label=chr(glyph))
     label.get_style_context().add_class("glyph")
     font = Gtk.CssProvider()  # per-label: the size follows the (shrinkable) icon size
-    font.load_from_data(f'label {{ font-family: "{GLYPH_FONT}"; font-size: {int(size * 0.55)}px; }}'.encode())
+    font.load_from_data(f'label {{ font-family: "{GLYPH_FONT}"; font-size: {int(size * 0.8)}px; }}'.encode())
     label.get_style_context().add_provider(font, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     label.set_size_request(size, size)
     return label
-
-
-def desktop_gicon(wm_class):
-    """Icon of the .desktop entry best matching a window class, if any."""
-    if not wm_class:
-        return None
-    try:
-        for group in Gio.DesktopAppInfo.search(wm_class):
-            for desktop_id in group:
-                app = Gio.DesktopAppInfo.new(desktop_id)
-                if app and app.get_icon():
-                    return app.get_icon()
-    except Exception:
-        pass
-    return None
 
 
 class AppButton(Gtk.Button):
@@ -180,12 +154,12 @@ class AppButton(Gtk.Button):
         self.set_tooltip_text(name)
         self.get_style_context().add_class("app")
 
-        icon.set_margin_start(4)
-        icon.set_margin_end(4)
+        icon.set_margin_start(3)
+        icon.set_margin_end(3)
         overlay = Gtk.Overlay()
         overlay.add(icon)
-        # dots sit in the 4px margin on the screen-edge (right) side
-        self.dots = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        # dots sit in the 3px margin on the screen-edge (right) side
+        self.dots = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.dots.set_halign(Gtk.Align.END)
         self.dots.set_valign(Gtk.Align.CENTER)
         overlay.add_overlay(self.dots)
@@ -198,7 +172,7 @@ class AppButton(Gtk.Button):
             self.dots.remove(child)
         for _ in range(min(len(windows), MAX_DOTS)):
             dot = Gtk.Box()
-            dot.set_size_request(4, 4)
+            dot.set_size_request(3, 3)
             dot.get_style_context().add_class("dot")
             self.dots.pack_start(dot, False, False, 0)
         self.dots.show_all()
@@ -216,6 +190,29 @@ class AppButton(Gtk.Button):
         elif event.button == 3:
             self.dock.show_menu(self, event)
         return True
+
+
+def measure_slot_extra(sizes):
+    """Height one dock entry takes beyond its icon size, measured under the
+    live GTK theme/CSS (stack two entries, subtract one) rather than assumed:
+    the glyph's line height and the GTK theme's own button borders add a few
+    px that a hand-computed constant missed (the crowded dock then ran
+    15px off the screen)."""
+    extra = 0
+    for size in sizes:
+        heights = []
+        for n in (1, 2):
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            for _ in range(n):
+                box.pack_start(AppButton(None, None, "", icon_widget(OTHER_APP_GLYPH, size), None),
+                               False, False, 0)
+            holder = Gtk.OffscreenWindow()
+            holder.add(box)
+            holder.show_all()
+            heights.append(box.get_preferred_height()[1])
+            holder.destroy()
+        extra = max(extra, heights[1] - heights[0] - size)
+    return extra
 
 
 class DockWindow(Gtk.Window):
@@ -242,7 +239,7 @@ class DockWindow(Gtk.Window):
         x = monitor_rect.x + monitor_rect.width - gap - width
         y = monitor_rect.y + top + gap
         height = monitor_rect.height - top - 2 * gap
-        self.height = height
+        self.width, self.height = width, height
         self.icon_size = None
         self.set_size_request(width, height)
         self.move(x, y)
@@ -276,10 +273,10 @@ class DockWindow(Gtk.Window):
 
         Like Ubuntu's dock, icons shrink instead of the dock growing past
         the bottom of the screen. Room is reserved for Show Applications at
-        BOTH ends, so the centered app group can never run into it; 33 =
-        2*2 outline + 2*8 padding + separator (1 + 2*6 margin).
+        BOTH ends, so the centered app group can never run into it; 23 =
+        2*1 outline + 2*6 padding + separator (1 + 2*4 margin).
         """
-        fit = (self.height - 33) // (n_apps + 2) - SLOT_EXTRA
+        fit = (self.height - 23) // (n_apps + 2) - self.dock.slot_extra
         return max(MIN_ICON, min(self.dock.layout["dock"]["icon_size"], fit))
 
     def set_icon_size(self, size):
@@ -290,19 +287,28 @@ class DockWindow(Gtk.Window):
                 box.remove(child)
                 child.destroy()
         self.buttons = {}
-        for name, icons, _regex, glyph, cmd in APPS:
-            btn = AppButton(self.dock, name, name, icon_widget(icons, glyph, size), cmd)
+        for name, _regex, glyph, cmd in APPS:
+            btn = AppButton(self.dock, name, name, icon_widget(glyph, size), cmd)
             self.buttons[name] = btn
             self.pinned_box.pack_start(btn, False, False, 0)
         show_apps = AppButton(self.dock, None, "Show Applications",
-                              icon_widget(["view-app-grid-symbolic", "view-app-grid"], 0xF00A, size),
+                              icon_widget(SHOW_APPS_GLYPH, size),
                               SHOW_APPS_CMD)
         self.show_apps_box.pack_start(show_apps, False, False, 0)
         self.pinned_box.show_all()
         self.show_apps_box.show_all()
 
     def update(self, pinned, running):
-        size = self.fit_icon_size(len(APPS) + len(running))
+        # Even at MIN_ICON there's a hard limit: past it, show the running
+        # apps that fit and turn the last slot into "more windows" (rofi's
+        # window switcher) instead of letting the dock run off the screen.
+        max_entries = (self.height - 23) // (MIN_ICON + self.dock.slot_extra) - 2
+        overflow = len(APPS) + len(running) > max_entries
+        if overflow:
+            running = dict(list(running.items())[:max(0, max_entries - len(APPS) - 1)])
+        keys = list(running) + ([MORE_KEY] if overflow else [])
+
+        size = self.fit_icon_size(len(APPS) + len(keys))
         if size != self.icon_size:
             self.set_icon_size(size)  # also empties running_box -> rebuilt below
         for name, btn in self.buttons.items():
@@ -310,21 +316,24 @@ class DockWindow(Gtk.Window):
                 btn.set_windows(pinned[name])
         # rebuild the running (non-pinned) section only when its set changes
         current = [b.key for b in self.running_box.get_children()]
-        if current != list(running):
+        if current != keys:
             for child in self.running_box.get_children():
                 self.running_box.remove(child)
                 child.destroy()
             for key, (name, windows) in running.items():
-                w = windows[0]
-                names = [w.window_instance, (w.window_instance or "").lower(),
-                         w.window_class, (w.window_class or "").lower()]
-                icon = icon_widget(names, 0xF2D0, size, desktop_gicon(w.window_class))
-                btn = AppButton(self.dock, key, name, icon, None)
+                btn = AppButton(self.dock, key, name, icon_widget(OTHER_APP_GLYPH, size), None)
+                self.running_box.pack_start(btn, False, False, 0)
+            if overflow:
+                btn = AppButton(self.dock, MORE_KEY, "More windows", icon_widget(MORE_GLYPH, size), MORE_CMD)
                 self.running_box.pack_start(btn, False, False, 0)
             self.running_box.show_all()
         for btn in self.running_box.get_children():
-            btn.set_windows(running[btn.key][1])
-        self.separator.set_visible(bool(running))
+            if btn.key in running:
+                btn.set_windows(running[btn.key][1])
+        self.separator.set_visible(bool(keys))
+        # GTK grows a window to fit its content but never shrinks it back on
+        # its own -- pin it to the dock's size after every rebuild.
+        self.resize(self.width, self.height)
 
 
 class Dock:
@@ -338,10 +347,7 @@ class Dock:
         provider.load_from_data(css(layout).encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-        if any(os.path.isdir(os.path.join(d, ICON_THEME)) for d in
-               (os.path.expanduser("~/.icons"), os.path.expanduser("~/.local/share/icons"),
-                "/usr/share/icons")):
-            Gtk.Settings.get_default().set_property("gtk-icon-theme-name", ICON_THEME)
+        self.slot_extra = measure_slot_extra({MIN_ICON, layout["dock"]["icon_size"]})
 
         Gdk.Screen.get_default().connect("monitors-changed", lambda *_: self.rebuild())
         self.rebuild()
@@ -401,7 +407,7 @@ class Dock:
             if con.window is None:
                 continue
             cls, inst = con.window_class or "", con.window_instance or ""
-            for name, _icons, regex, _glyph, _cmd in APPS:
+            for name, regex, _glyph, _cmd in APPS:
                 if re.search(regex, cls, re.I) or re.search(regex, inst, re.I):
                     pinned[name].append(con)
                     break

@@ -89,10 +89,10 @@ LAYOUT="${LAYOUT:-classic}"
 EDGE_GAP="${EDGE_GAP:-8}"
 TOPBAR_HEIGHT="${TOPBAR_HEIGHT:-32}"
 TOPBAR_BORDER="${TOPBAR_BORDER:-2}"
-DOCK_ICON_SIZE="${DOCK_ICON_SIZE:-40}"
-# icon + 2*(button margin 6 + button padding 4) + 2*dock outline 2 -- keep
-# in sync with the CSS in dock.py
-DOCK_WIDTH=$((DOCK_ICON_SIZE + 24))
+DOCK_ICON_SIZE="${DOCK_ICON_SIZE:-20}"
+# icon + 2*(dock outline 1 + button margin 2 + icon margin 3) -- keep in
+# sync with the CSS in dock.py
+DOCK_WIDTH=$((DOCK_ICON_SIZE + 12))
 WINDOW_MARGIN=4   # matches i3's `gaps outer`: gap kept around maximized windows
 I3_INNER_GAP=$(awk '$1=="gaps" && $2=="inner" {print $3; exit}' "$I3_CONFIG")
 I3_INNER_GAP="${I3_INNER_GAP:-0}"
