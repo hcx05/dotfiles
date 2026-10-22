@@ -113,12 +113,19 @@ source $ZSH/oh-my-zsh.sh
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 # i3 黑白主題 (mono) 用自己的 p10k 設定檔：跟這份 .zshrc 同資料夾的 .p10k-mono.zsh。
 # 在黑白主題開的終端機裡跑 `p10k configure` 只會改到它，其他主題照舊用 ~/.p10k.zsh。
-# (~/.config/rice/terminal-style 由 ~/.config/rice/apply-theme.sh 寫入；切換主題後新開的終端機生效)
+# (terminal-style 由 apply-theme.sh 寫入；切換主題後新開的終端機生效)
+# 主題從 dotfiles repo 裡讀 (i3/rice/terminal-style)，不是從 ~/.config/rice 讀：
+# root (sudo su / sudo -i) 的家目錄是 /root，沒有 ~/.config/rice，但只要
+# /root/.zshrc 連到這份檔案，一樣會跟著目前的主題走。
+_rice_zsh_dir=${${(%):-%x}:A:h}
+_rice_style_file=$_rice_zsh_dir/../../i3/rice/terminal-style
+[[ -r $_rice_style_file ]] || _rice_style_file=~/.config/rice/terminal-style
 POWERLEVEL9K_CONFIG_FILE=~/.p10k.zsh
-if [[ -r ~/.config/rice/terminal-style && "$(<~/.config/rice/terminal-style)" == mono &&
-      -f ${${(%):-%x}:A:h}/.p10k-mono.zsh ]]; then
-  POWERLEVEL9K_CONFIG_FILE=${${(%):-%x}:A:h}/.p10k-mono.zsh
+if [[ -r $_rice_style_file && "$(<$_rice_style_file)" == mono &&
+      -f $_rice_zsh_dir/.p10k-mono.zsh ]]; then
+  POWERLEVEL9K_CONFIG_FILE=$_rice_zsh_dir/.p10k-mono.zsh
 fi
+unset _rice_zsh_dir _rice_style_file
 [[ ! -f $POWERLEVEL9K_CONFIG_FILE ]] || source $POWERLEVEL9K_CONFIG_FILE
 export HOSTNAME=$(cat /etc/hostname)
 PROMPT='%n@%m %~ %# '
