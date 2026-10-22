@@ -90,6 +90,7 @@ EDGE_GAP="${EDGE_GAP:-8}"
 TOPBAR_HEIGHT="${TOPBAR_HEIGHT:-32}"
 TOPBAR_BORDER="${TOPBAR_BORDER:-2}"
 DOCK_ICON_SIZE="${DOCK_ICON_SIZE:-20}"
+DOCK_LENGTH="${DOCK_LENGTH:-1}"   # fraction of the screen height the dock spans
 # icon + 2*(dock outline 1 + button margin 2 + icon margin 3) -- keep in
 # sync with the CSS in dock.py
 DOCK_WIDTH=$((DOCK_ICON_SIZE + 12))
@@ -127,7 +128,7 @@ cat > "$THEME_DIR/layout.json" <<EOF
   "reserved": {"top": $RESERVED_TOP, "right": $RESERVED_RIGHT, "bottom": 0, "left": 0},
   "window_margin": $WINDOW_MARGIN,
   "edge_gap": $EDGE_GAP,
-  "dock": {"width": $DOCK_WIDTH, "icon_size": $DOCK_ICON_SIZE},
+  "dock": {"width": $DOCK_WIDTH, "icon_size": $DOCK_ICON_SIZE, "length": $DOCK_LENGTH},
   "colors": {
     "background": "$BACKGROUND", "background_alt": "$BACKGROUND_ALT",
     "foreground": "$FOREGROUND", "foreground_alt": "$FOREGROUND_ALT",

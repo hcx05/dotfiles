@@ -237,8 +237,11 @@ class DockWindow(Gtk.Window):
         gap = layout["edge_gap"]
         width = layout["dock"]["width"]
         x = monitor_rect.x + monitor_rect.width - gap - width
-        y = monitor_rect.y + top + gap
-        height = monitor_rect.height - top - 2 * gap
+        # "length": fraction of the free height below the top bar the dock
+        # spans, centered in it (theme.conf DOCK_LENGTH)
+        full = monitor_rect.height - top - 2 * gap
+        height = round(full * min(1.0, max(0.1, layout["dock"].get("length", 1.0))))
+        y = monitor_rect.y + top + gap + (full - height) // 2
         self.width, self.height = width, height
         self.icon_size = None
         self.set_size_request(width, height)
