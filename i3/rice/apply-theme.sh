@@ -222,12 +222,10 @@ color7  ${FOREGROUND}
 color15 #FFFFFF
 EOF
 
-# ------------------------------------------- tmux / zsh / nvim style ----
-# Presets pick a look for the terminal apps with TERMINAL_STYLE ("classic" =
-# the purple/green look these configs always had, "mono" = black & white).
-# The apps read this one word themselves -- tmux's status script, the zsh
-# prompt (terminal/zsh/rice-theme.zsh) and nvim (lua/rice_theme.lua) -- so
-# running shells / editors pick up a switch on their own (see switch-theme.sh).
+# ------------------------------------------------------- tmux style ----
+# Presets pick a tmux status look with TERMINAL_STYLE ("classic" = the
+# purple/green powerline segments, "mono" = plain white text). tmux's status
+# script reads this one word itself every refresh (see switch-theme.sh).
 TERMINAL_STYLE="${TERMINAL_STYLE:-classic}"
 echo "$TERMINAL_STYLE" > "$THEME_DIR/terminal-style"
 

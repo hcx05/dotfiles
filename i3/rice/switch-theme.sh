@@ -67,22 +67,10 @@ fi
 
 "$THEME_DIR/apply-theme.sh"
 
-# Terminal apps that are already open. zsh needs nothing here: its prompt
-# re-reads terminal-style before every prompt (terminal/zsh/rice-theme.zsh).
-# tmux: status-style comes from the generated tmux-theme.conf (the status
-# script itself re-reads terminal-style every second). No server = no-op.
+# tmux (already running): status-style comes from the generated
+# tmux-theme.conf (the status script itself re-reads terminal-style every
+# second). No server = no-op.
 tmux source-file "$THEME_DIR/tmux-theme.conf" >/dev/null 2>&1 9>&- < /dev/null || true
-# nvim: every running instance listens on a socket (nvim 0.9+ default path,
-# with or without XDG_RUNTIME_DIR) -- ask each one to re-apply its colors.
-# timeout: a socket left behind by a crashed nvim must not hang the switch.
-if command -v nvim >/dev/null 2>&1; then
-    for sock in "${XDG_RUNTIME_DIR:-/nonexistent}"/nvim.*.0 /tmp/nvim."${USER:-$(id -un)}"/*/nvim.*.0; do
-        [ -S "$sock" ] || continue
-        timeout 2 nvim --server "$sock" \
-            --remote-expr 'luaeval("pcall(function() require(\"rice_theme\").apply() end)")' \
-            >/dev/null 2>&1 9>&- < /dev/null || true
-    done
-fi
 # kitty: SIGUSR1 = reload kitty.conf (and the colors.conf it includes).
 # Only kitty >= 0.24 handles that signal -- older ones would be KILLED by it.
 if command -v kitty >/dev/null 2>&1; then

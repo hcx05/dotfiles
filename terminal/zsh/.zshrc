@@ -112,8 +112,6 @@ source $ZSH/oh-my-zsh.sh
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-# 依目前 i3 主題調整 p10k 顏色（mono 主題 = 黑白），檔案跟這份 .zshrc 放在同一個資料夾
-[[ ! -r "${${(%):-%x}:A:h}/rice-theme.zsh" ]] || source "${${(%):-%x}:A:h}/rice-theme.zsh"
 export HOSTNAME=$(cat /etc/hostname)
 PROMPT='%n@%m %~ %# '
 neofetch
