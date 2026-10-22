@@ -39,33 +39,16 @@ import fcntl
 import i3ipc
 import json
 import os
-import re
 import sys
 import threading
 import time
 
+from reserved_area import maximized_rect
+
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
-POLYBAR_CONF = os.path.expanduser("~/.config/polybar/config.ini")
 LOCK_FILE = os.path.expanduser("~/.cache/i3-fix-output-daemon.lock")
-MARGIN = 4  # matches theme's gaps outer, same constant default-size.py/maximize-toggle.py use
 RETRY_DELAYS = [0.3, 1.0, 2.0]  # seconds after an output event to re-apply
 
-
-def bar_height(section):
-    in_section = False
-    with open(POLYBAR_CONF) as f:
-        for line in f:
-            line = line.strip()
-            if line == f"[{section}]":
-                in_section = True
-                continue
-            if in_section and line.startswith("["):
-                break
-            if in_section:
-                m = re.match(r"^height\s*=\s*(\d+)", line)
-                if m:
-                    return int(m.group(1))
-    return 30
 
 
 def fix_maximized_windows(i3):
@@ -80,8 +63,6 @@ def fix_maximized_windows(i3):
 
     tree = i3.get_tree()
     outputs = i3.get_outputs()
-    top = bar_height("bar/mainbar")
-    bottom = 0  # no bottom bar to avoid anymore
 
     for wid_str in state:
         try:
@@ -104,10 +85,7 @@ def fix_maximized_windows(i3):
         if out_rect is None:
             continue
 
-        max_x = out_rect.x + MARGIN
-        max_y = out_rect.y + top + MARGIN
-        max_w = out_rect.width - 2 * MARGIN
-        max_h = out_rect.height - top - bottom - 2 * MARGIN
+        max_x, max_y, max_w, max_h = maximized_rect(out_rect)
 
         i3.command(f'[id={win.window}] move position {max_x} {max_y}')
         i3.command(f'[id={win.window}] resize set {max_w} {max_h}')

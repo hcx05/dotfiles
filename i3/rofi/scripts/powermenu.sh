@@ -18,24 +18,30 @@ SUSPEND="  $ICON_SUSPEND  Suspend"
 REBOOT="  $ICON_REBOOT  Reboot"
 POWEROFF="  $ICON_POWEROFF  Shut Down"
 
-# Theme entry toggles to whichever OTHER preset isn't active right now --
-# label names it directly ("Theme: Green") instead of a generic "Switch
-# Theme" so you know what one click does before you click it. Reads the
-# current preset from the theme.conf symlink (see switch-theme.sh), not
-# from a separate state file, so it can never drift out of sync.
+# Theme entry cycles to the NEXT preset after the active one, in name order
+# (green -> mono -> purple -> green ...) -- label names it directly
+# ("Theme: Mono") instead of a generic "Switch Theme" so you know what one
+# click does before you click it. Reads the current preset from the
+# theme.conf symlink (see switch-theme.sh), not from a separate state file,
+# so it can never drift out of sync.
 CURRENT_THEME=$(basename "$(readlink -f "$HOME/.config/rice/theme.conf")")
 CURRENT_THEME="${CURRENT_THEME#theme-}"
 CURRENT_THEME="${CURRENT_THEME%.conf}"
-NEXT_THEME=""
+PRESETS=()
 for f in "$HOME/.config/rice"/theme-*.conf; do
     base="$(basename "$f")"
     base="${base#theme-}"
-    base="${base%.conf}"
-    if [ "$base" != "$CURRENT_THEME" ]; then
-        NEXT_THEME="$base"
+    PRESETS+=("${base%.conf}")
+done
+NEXT_THEME=""
+for i in "${!PRESETS[@]}"; do
+    if [ "${PRESETS[$i]}" = "$CURRENT_THEME" ]; then
+        NEXT_THEME="${PRESETS[$(( (i + 1) % ${#PRESETS[@]} ))]}"
         break
     fi
 done
+# active preset not found among theme-*.conf -- just offer the first one
+[ -z "$NEXT_THEME" ] && NEXT_THEME="${PRESETS[0]}"
 THEME="  $ICON_THEME  Theme: ${NEXT_THEME^}"
 
 ROFI="rofi -dmenu -config $HOME/.config/rofi/config.rasi -theme-str 'window {width: 260px;} listview {lines: 6;}'"

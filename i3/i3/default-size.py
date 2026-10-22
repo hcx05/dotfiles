@@ -22,31 +22,14 @@ import fcntl
 import i3ipc
 import json
 import os
-import re
 import sys
 
+from reserved_area import maximized_rect
+
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
-POLYBAR_CONF = os.path.expanduser("~/.config/polybar/config.ini")
 LOCK_FILE = os.path.expanduser("~/.cache/i3-default-size-daemon.lock")
-MARGIN = 4  # matches theme's gaps outer, same constant maximize-toggle.py uses
 NORMAL_W, NORMAL_H = 1400, 900  # the old default size, now the toggle's "restore" size
 
-
-def bar_height(section):
-    in_section = False
-    with open(POLYBAR_CONF) as f:
-        for line in f:
-            line = line.strip()
-            if line == f"[{section}]":
-                in_section = True
-                continue
-            if in_section and line.startswith("["):
-                break
-            if in_section:
-                m = re.match(r"^height\s*=\s*(\d+)", line)
-                if m:
-                    return int(m.group(1))
-    return 30
 
 
 def on_new_window(i3, event):
@@ -72,13 +55,7 @@ def on_new_window(i3, event):
     if out_rect is None:
         return
 
-    top = bar_height("bar/mainbar")
-    bottom = 0  # no bottom bar to avoid anymore
-
-    max_x = out_rect.x + MARGIN
-    max_y = out_rect.y + top + MARGIN
-    max_w = out_rect.width - 2 * MARGIN
-    max_h = out_rect.height - top - bottom - 2 * MARGIN
+    max_x, max_y, max_w, max_h = maximized_rect(out_rect)
 
     normal_x = out_rect.x + (out_rect.width - NORMAL_W) // 2
     normal_y = out_rect.y + (out_rect.height - NORMAL_H) // 2

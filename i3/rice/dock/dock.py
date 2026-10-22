@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+"""Ubuntu-style app dock on the right screen edge -- the mono theme's
+(theme.conf LAYOUT="dock") replacement for polybar's quicklaunch module.
+
+  - pinned apps (APPS below), then any other running apps after a
+    separator, centered vertically; "Show Applications" (rofi drun) at
+    the bottom
+  - a dot per open window (up to 3) on the screen-edge side of each icon,
+    and a highlight on the app that has focus
+  - left click: launch if not running; focus it if it is (switching
+    workspace if needed, or bringing it back from the scratchpad); cycle
+    through its windows if it's already focused; with a single focused
+    window, minimize it to the scratchpad (same as $mod+Shift+minus)
+  - middle click: always open a new window; right click: small menu
+
+Why a custom GTK window and not plank/tint2: those set
+_NET_WM_WINDOW_TYPE_DOCK and i3 force-places every dock-type window into
+its top/bottom dock area -- a vertical right-side dock is impossible that
+way. This is an override-redirect (POPUP) window instead, which i3 doesn't
+manage at all: nothing reserves space for it automatically, which is why
+apply-theme.sh writes the reserved strip into ~/.config/rice/layout.json
+(read here for geometry/colors, and by the maximize/default-size scripts
+so maximized windows stop at the dock) and into i3's gaps (tiled windows).
+
+Started/stopped by ~/.config/polybar/launch.sh (exec_always), so an i3
+reload -- including the one switch-theme.sh does -- restarts it with the
+new colors, and switching to a classic preset stops it.
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import threading
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+
+import i3ipc  # noqa: E402
+
+LAYOUT_FILE = os.path.expanduser("~/.config/rice/layout.json")
+LOCK_FILE = os.path.expanduser("~/.cache/rice-dock.lock")
+HOME = os.path.expanduser("~")
+ICON_THEME = "candy-icons"  # same icon theme rofi uses (rofi/config.rasi)
+GLYPH_FONT = "JetBrainsMono Nerd Font"
+
+# Pinned apps, top to bottom -- same set as polybar's quicklaunch.sh. To pin
+# another one, add a line:
+#   (tooltip name, [icon names to try, in order], WM_CLASS regex (matched
+#    case-insensitively against class and instance), fallback Nerd Font
+#    codepoint if no icon is found, shell command)
+APPS = [
+    ("Firefox", ["firefox-esr", "firefox"], r"firefox", 0xF269, "firefox-esr"),
+    ("Terminal", ["kitty", "utilities-terminal"], r"^kitty$", 0xF120,
+     f"kitty --config {HOME}/.config/kitty/kitty.conf"),
+    ("Burp Suite", ["kali-burpsuite", "burpsuite"], r"burp", 0xF188, "burpsuite"),
+    ("ZAP", ["kali-zaproxy", "zaproxy", "zap"], r"zap", 0xF0E7,
+     f"{HOME}/Arsenal/ZAP_2.17.0/zap.sh"),
+    ("Wireshark", ["org.wireshark.Wireshark", "wireshark", "kali-wireshark"], r"wireshark", 0xF002,
+     "/usr/share/kali-menu/helper-scripts/wireshark.sh"),
+    ("Files", ["org.xfce.thunar", "Thunar", "system-file-manager"], r"^thunar$", 0xF07B, "thunar"),
+    ("Settings", ["org.xfce.settings.manager", "preferences-system"], r"xfce4-settings-manager", 0xF013,
+     "xfce4-settings-manager"),
+]
+SHOW_APPS_CMD = f"rofi -show drun -config {HOME}/.config/rofi/config.rasi"
+MAX_DOTS = 3
+
+
+def load_layout():
+    with open(LAYOUT_FILE) as f:
+        return json.load(f)
+
+
+def rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}, {alpha})"
+
+
+def launch(cmd):
+    subprocess.Popen(cmd, shell=True, cwd=HOME, start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def css(layout):
+    c = layout["colors"]
+    icon = layout["dock"]["icon_size"]
+    # Button margin 6px + image margin 4px each side + 2px dock outline is
+    # what apply-theme.sh's DOCK_WIDTH (= icon + 24) assumes -- keep in sync.
+    return f"""
+    window {{ background-color: transparent; }}
+    .dock {{
+        background-color: {rgba(c["background"], layout["bar_transparency"])};
+        border: 2px solid {c["accent_alt"]};
+        border-radius: 14px;
+        padding: 8px 0;
+    }}
+    .app {{
+        background: none; background-color: transparent; background-image: none;
+        border: none; box-shadow: none; outline: none; text-shadow: none;
+        border-radius: 10px; padding: 4px 0; margin: 2px 6px;
+        min-width: 0; min-height: 0;
+    }}
+    .app:hover {{ background-color: {c["background_alt"]}; }}
+    .app.focused {{
+        background-color: {c["background_alt"]};
+        box-shadow: inset 0 0 0 1px {c["foreground_alt"]};
+    }}
+    .dot {{ background-color: {c["foreground_alt"]}; border-radius: 2px; min-width: 4px; min-height: 4px; }}
+    .app.focused .dot {{ background-color: {c["accent"]}; }}
+    .glyph {{ font-family: "{GLYPH_FONT}"; font-size: {int(icon * 0.55)}px; color: {c["foreground"]}; }}
+    separator {{ background-color: {c["border_inactive"]}; min-height: 1px; margin: 6px 14px; }}
+    tooltip, tooltip.background {{
+        background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; border-radius: 6px;
+    }}
+    tooltip label {{ color: {c["foreground"]}; }}
+    menu, .menu {{ background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; padding: 4px; }}
+    menuitem {{ color: {c["foreground"]}; padding: 6px 12px; border-radius: 6px; }}
+    menuitem:hover {{ background-color: {c["accent"]}; }}
+    menuitem:hover label {{ color: {c["background"]}; }}
+    menuitem:disabled label {{ color: {c["foreground_alt"]}; }}
+    """
+
+
+def icon_widget(icon_names, glyph, size, extra_gicon=None):
+    """Gtk.Image from the first icon name the theme has, else a Nerd Font glyph."""
+    theme = Gtk.IconTheme.get_default()
+    info = None
+    for name in icon_names:
+        if name and theme.has_icon(name):
+            info = theme.lookup_icon(name, size, Gtk.IconLookupFlags.FORCE_SIZE)
+            if info:
+                break
+    if info is None and extra_gicon is not None:
+        info = theme.lookup_by_gicon(extra_gicon, size, Gtk.IconLookupFlags.FORCE_SIZE)
+    if info is not None:
+        try:
+            return Gtk.Image.new_from_pixbuf(info.load_icon())
+        except GLib.Error:
+            pass
+    label = Gtk.Label(label=chr(glyph))
+    label.get_style_context().add_class("glyph")
+    label.set_size_request(size, size)
+    return label
+
+
+def desktop_gicon(wm_class):
+    """Icon of the .desktop entry best matching a window class, if any."""
+    if not wm_class:
+        return None
+    try:
+        for group in Gio.DesktopAppInfo.search(wm_class):
+            for desktop_id in group:
+                app = Gio.DesktopAppInfo.new(desktop_id)
+                if app and app.get_icon():
+                    return app.get_icon()
+    except Exception:
+        pass
+    return None
+
+
+class AppButton(Gtk.Button):
+    """One dock entry: icon + window dots, click handling via the Dock."""
+
+    def __init__(self, dock, key, name, icon, cmd):
+        super().__init__()
+        self.dock, self.key, self.name, self.cmd = dock, key, name, cmd
+        self.windows = []
+        self.set_relief(Gtk.ReliefStyle.NONE)
+        self.set_can_focus(False)
+        self.set_tooltip_text(name)
+        self.get_style_context().add_class("app")
+
+        icon.set_margin_start(4)
+        icon.set_margin_end(4)
+        overlay = Gtk.Overlay()
+        overlay.add(icon)
+        # dots sit in the 4px margin on the screen-edge (right) side
+        self.dots = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.dots.set_halign(Gtk.Align.END)
+        self.dots.set_valign(Gtk.Align.CENTER)
+        overlay.add_overlay(self.dots)
+        self.add(overlay)
+        self.connect("button-release-event", self.on_release)
+
+    def set_windows(self, windows):
+        self.windows = windows
+        for child in self.dots.get_children():
+            self.dots.remove(child)
+        for _ in range(min(len(windows), MAX_DOTS)):
+            dot = Gtk.Box()
+            dot.set_size_request(4, 4)
+            dot.get_style_context().add_class("dot")
+            self.dots.pack_start(dot, False, False, 0)
+        self.dots.show_all()
+        ctx = self.get_style_context()
+        if any(w.focused for w in windows):
+            ctx.add_class("focused")
+        else:
+            ctx.remove_class("focused")
+
+    def on_release(self, _widget, event):
+        if event.button == 1:
+            self.dock.activate(self)
+        elif event.button == 2 and self.cmd:
+            launch(self.cmd)
+        elif event.button == 3:
+            self.dock.show_menu(self, event)
+        return True
+
+
+class DockWindow(Gtk.Window):
+    """The dock on one monitor."""
+
+    def __init__(self, dock, monitor_rect):
+        super().__init__(type=Gtk.WindowType.POPUP)
+        self.dock = dock
+        self.rect = monitor_rect
+        self.buttons = {}
+
+        self.set_app_paintable(True)
+        visual = self.get_screen().get_rgba_visual()
+        if visual is not None:
+            self.set_visual(visual)
+        # DOCK type: picom skips its shadow/rounded-corner handling for it
+        # (see picom.conf.template); i3 never sees it (override-redirect).
+        self.set_type_hint(Gdk.WindowTypeHint.DOCK)
+
+        layout = dock.layout
+        top = layout["reserved"]["top"]
+        gap = layout["edge_gap"]
+        width = layout["dock"]["width"]
+        x = monitor_rect.x + monitor_rect.width - gap - width
+        y = monitor_rect.y + top + gap
+        height = monitor_rect.height - top - 2 * gap
+        self.set_size_request(width, height)
+        self.move(x, y)
+
+        frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        frame.get_style_context().add_class("dock")
+        self.add(frame)
+
+        # pinned + running apps as one group, vertically centered in the
+        # dock (set_center_widget centers on the whole frame, independent of
+        # the Show Applications button packed at the bottom)
+        size = layout["dock"]["icon_size"]
+        apps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.pinned_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for name, icons, _regex, glyph, cmd in APPS:
+            btn = AppButton(dock, name, name, icon_widget(icons, glyph, size), cmd)
+            self.buttons[name] = btn
+            self.pinned_box.pack_start(btn, False, False, 0)
+        apps_box.pack_start(self.pinned_box, False, False, 0)
+
+        self.separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        apps_box.pack_start(self.separator, False, False, 0)
+        self.running_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        apps_box.pack_start(self.running_box, False, False, 0)
+        frame.set_center_widget(apps_box)
+
+        show_apps = AppButton(dock, None, "Show Applications",
+                              icon_widget(["view-app-grid-symbolic", "view-app-grid"], 0xF00A, size),
+                              SHOW_APPS_CMD)
+        frame.pack_end(show_apps, False, False, 0)
+
+        self.show_all()
+        self.separator.hide()
+
+    def update(self, pinned, running, size):
+        for name, btn in self.buttons.items():
+            if name in pinned:
+                btn.set_windows(pinned[name])
+        # rebuild the running (non-pinned) section only when its set changes
+        current = [b.key for b in self.running_box.get_children()]
+        if current != list(running):
+            for child in self.running_box.get_children():
+                self.running_box.remove(child)
+                child.destroy()
+            for key, (name, windows) in running.items():
+                w = windows[0]
+                names = [w.window_instance, (w.window_instance or "").lower(),
+                         w.window_class, (w.window_class or "").lower()]
+                icon = icon_widget(names, 0xF2D0, size, desktop_gicon(w.window_class))
+                btn = AppButton(self.dock, key, name, icon, None)
+                self.running_box.pack_start(btn, False, False, 0)
+            self.running_box.show_all()
+        for btn in self.running_box.get_children():
+            btn.set_windows(running[btn.key][1])
+        self.separator.set_visible(bool(running))
+
+
+class Dock:
+    def __init__(self, layout):
+        self.layout = layout
+        self.i3 = i3ipc.Connection(auto_reconnect=True)
+        self.windows = []
+        self.refresh_pending = False
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css(layout).encode())
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
+        if any(os.path.isdir(os.path.join(d, ICON_THEME)) for d in
+               (os.path.expanduser("~/.icons"), os.path.expanduser("~/.local/share/icons"),
+                "/usr/share/icons")):
+            Gtk.Settings.get_default().set_property("gtk-icon-theme-name", ICON_THEME)
+
+        Gdk.Screen.get_default().connect("monitors-changed", lambda *_: self.rebuild())
+        self.rebuild()
+        threading.Thread(target=self.listen, daemon=True).start()
+
+    # ---- windows per monitor --------------------------------------------
+    def rebuild(self):
+        for w in self.windows:
+            w.destroy()
+        display = Gdk.Display.get_default()
+        self.windows = [DockWindow(self, display.get_monitor(i).get_geometry())
+                        for i in range(display.get_n_monitors())]
+        self.queue_refresh()
+
+    # ---- i3 state -> dots / focus highlight / running apps --------------
+    def listen(self):
+        # i3ipc's event loop blocks, so it gets its own thread + connection;
+        # every event just schedules a refresh on the GTK main thread.
+        conn = i3ipc.Connection(auto_reconnect=True)
+        for event in (i3ipc.Event.WINDOW, i3ipc.Event.WORKSPACE, i3ipc.Event.OUTPUT):
+            conn.on(event, lambda *_: GLib.idle_add(self.queue_refresh))
+        conn.main()
+
+    def queue_refresh(self):
+        # coalesce bursts of events (one focus change is several of them)
+        if not self.refresh_pending:
+            self.refresh_pending = True
+            GLib.timeout_add(60, self.refresh)
+        return False
+
+    def refresh(self):
+        self.refresh_pending = False
+        try:
+            tree = self.i3.get_tree()
+            outputs = self.i3.get_outputs()
+        except Exception:
+            return False
+
+        pinned = {name: [] for name, *_ in APPS}
+        running = {}
+        for con in tree.leaves():
+            if con.window is None:
+                continue
+            cls, inst = con.window_class or "", con.window_instance or ""
+            for name, _icons, regex, _glyph, _cmd in APPS:
+                if re.search(regex, cls, re.I) or re.search(regex, inst, re.I):
+                    pinned[name].append(con)
+                    break
+            else:
+                key = cls or inst or "?"
+                running.setdefault(key, (cls or inst or "Window", []))[1].append(con)
+
+        size = self.layout["dock"]["icon_size"]
+        for win in self.windows:
+            win.update(pinned, running, size)
+            self.restack(win, tree, outputs)
+        return False
+
+    def restack(self, win, tree, outputs):
+        # Hide under a fullscreen window ($mod+f), otherwise keep above
+        # everything -- i3 raises floating windows over override-redirect
+        # ones when they get focus, so re-raise after every event.
+        ws_name = None
+        for o in outputs:
+            r = o.rect
+            if o.active and (r.x, r.y, r.width, r.height) == (
+                    win.rect.x, win.rect.y, win.rect.width, win.rect.height):
+                ws_name = o.current_workspace
+                break
+        fullscreen = False
+        if ws_name is not None:
+            ws = next((w for w in tree.workspaces() if w.name == ws_name), None)
+            fullscreen = ws is not None and any(
+                c.fullscreen_mode == 1 for c in ws.descendants())
+        if fullscreen:
+            win.hide()
+        else:
+            win.show()
+            if win.get_window() is not None:
+                win.get_window().raise_()
+
+    # ---- clicks ---------------------------------------------------------
+    def focus(self, con):
+        if con.workspace() is not None and con.workspace().name == "__i3_scratch":
+            self.i3.command(f"[con_id={con.id}] scratchpad show")
+        else:
+            self.i3.command(f"[con_id={con.id}] focus")
+
+    def activate(self, btn):
+        wins = btn.windows
+        if not wins:
+            if btn.cmd:
+                launch(btn.cmd)
+            return
+        focused = [i for i, w in enumerate(wins) if w.focused]
+        if not focused:
+            visible = [w for w in wins if w.workspace() and w.workspace().name != "__i3_scratch"]
+            self.focus((visible or wins)[0])
+        elif len(wins) == 1:
+            self.i3.command(f"[con_id={wins[0].id}] move scratchpad")
+        else:
+            self.focus(wins[(focused[0] + 1) % len(wins)])
+
+    def show_menu(self, btn, event):
+        menu = Gtk.Menu()
+        title = Gtk.MenuItem(label=btn.name)
+        title.set_sensitive(False)
+        menu.append(title)
+        if btn.cmd:
+            item = Gtk.MenuItem(label="New Window")
+            item.connect("activate", lambda *_: launch(btn.cmd))
+            menu.append(item)
+        if btn.windows:
+            label = "Close" if len(btn.windows) == 1 else f"Close {len(btn.windows)} Windows"
+            item = Gtk.MenuItem(label=label)
+            ids = [w.id for w in btn.windows]
+            item.connect("activate", lambda *_: [self.i3.command(f"[con_id={i}] kill") for i in ids])
+            menu.append(item)
+        menu.show_all()
+        menu.attach_to_widget(btn, None)
+        menu.popup_at_widget(btn, Gdk.Gravity.WEST, Gdk.Gravity.EAST, event)
+
+
+def main():
+    # Single-instance guard (same pattern as clipd.py/alt-tab.py) -- launch.sh
+    # already kills the old dock before starting one, this just makes a
+    # stray double start harmless.
+    os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
+    lock_fd = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit(0)
+
+    try:
+        layout = load_layout()
+    except (OSError, ValueError, KeyError) as e:
+        sys.exit(f"dock: can't read {LAYOUT_FILE} ({e}) -- run ~/.config/rice/apply-theme.sh")
+    if layout.get("layout") != "dock":
+        sys.exit(0)  # active preset uses the classic layout -- no dock
+
+    GLib.set_prgname("rice-dock")
+    Dock(layout)
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

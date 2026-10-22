@@ -4,36 +4,21 @@ screen area below the top polybar bar, WITHOUT covering it (unlike i3's
 `fullscreen toggle`, which covers the whole output including that bar).
 Press again to restore the previous size and position.
 
-Top bar height is read from ~/.config/polybar/config.ini ([bar/mainbar]'s
-`height`) so this doesn't silently drift out of sync if that changes later.
-There is no bottom bar to avoid (the taskbar bar was removed), so the
-window fills all the way down to the screen edge.
+The strips to keep clear (top bar; plus the right-side dock in the mono
+theme's "dock" layout) come from reserved_area.py, which reads them from
+the active theme's generated ~/.config/rice/layout.json -- so this doesn't
+silently drift out of sync if the bar/dock change later. There is no
+bottom bar to avoid (the taskbar bar was removed), so the window fills
+all the way down to the screen edge.
 """
 import i3ipc
 import json
 import os
-import re
+
+from reserved_area import maximized_rect
 
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
-POLYBAR_CONF = os.path.expanduser("~/.config/polybar/config.ini")
-MARGIN = 4  # matches theme's gaps outer, purely aesthetic
 
-
-def bar_height(section):
-    in_section = False
-    with open(POLYBAR_CONF) as f:
-        for line in f:
-            line = line.strip()
-            if line == f"[{section}]":
-                in_section = True
-                continue
-            if in_section and line.startswith("["):
-                break
-            if in_section:
-                m = re.match(r"^height\s*=\s*(\d+)", line)
-                if m:
-                    return int(m.group(1))
-    return 30
 
 
 def main():
@@ -63,9 +48,6 @@ def main():
     if out_rect is None:
         return
 
-    top = bar_height("bar/mainbar")
-    bottom = 0  # no bottom bar to avoid anymore
-
     if wid in state:
         # restore
         r = state.pop(wid)
@@ -79,10 +61,7 @@ def main():
             "width": win.rect.width,
             "height": win.rect.height,
         }
-        new_x = out_rect.x + MARGIN
-        new_y = out_rect.y + top + MARGIN
-        new_w = out_rect.width - 2 * MARGIN
-        new_h = out_rect.height - top - bottom - 2 * MARGIN
+        new_x, new_y, new_w, new_h = maximized_rect(out_rect)
         i3.command(f'[id={win.window}] move position {new_x} {new_y}')
         i3.command(f'[id={win.window}] resize set {new_w} {new_h}')
 

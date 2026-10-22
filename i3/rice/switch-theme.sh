@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Swap between the rice's color presets: purple.conf / green.conf.
+# Swap between the rice's presets: theme-purple.conf / theme-green.conf /
+# theme-mono.conf (mono also switches the layout -- floating top bar + dock).
 # theme.conf is a symlink to whichever preset is "active"; this script
 # repoints that symlink, regenerates every consumer via apply-theme.sh,
 # and reloads/restarts the running WM pieces so it takes effect immediately.
@@ -38,7 +39,7 @@ THEME_DIR="$HOME/.config/rice"
 NAME="${1:-}"
 
 usage() {
-    echo "Usage: $0 <purple|green>"
+    echo "Usage: $0 <purple|green|mono>"
     echo "Available presets:"
     for f in "$THEME_DIR"/theme-*.conf; do
         base="$(basename "$f")"
@@ -55,7 +56,7 @@ ln -sf "theme-$NAME.conf" "$THEME_DIR/theme.conf"
 echo "theme.conf -> theme-$NAME.conf"
 
 # fastfetch dragon logo follows the preset too, if a matching recolor
-# exists (dragon-purple.png / dragon-green.png) -- silently left alone for
+# exists (dragon-purple.png / dragon-green.png / dragon-mono.png) -- silently left alone for
 # presets that don't have their own dragon variant yet.
 FASTFETCH_DIR="$HOME/.config/fastfetch"
 DRAGON_VARIANT="$FASTFETCH_DIR/dragon-$NAME.png"
@@ -68,18 +69,20 @@ fi
 
 # Repaint everything live instead of making the user log out/in.
 #
-# Polybar is deliberately NOT handled here. ~/.config/i3/config has
-# `exec_always --no-startup-id ~/.config/polybar/launch.sh`, which i3 runs
-# automatically on every `i3-msg reload` below -- and launch.sh already
-# does a full killall-polybar-then-wait-then-relaunch (both bars, every
-# monitor). An earlier version of this script ALSO pkilled/relaunched
-# polybar itself, racing launch.sh's own kill/relaunch on every reload --
-# confirmed by reproducing it repeatedly: mainbar ended up duplicated
-# (sometimes taskbar instead, depending on scheduling) because both this
-# script and launch.sh were independently killing and recreating the same
-# processes at the same time. Trust the exec_always path instead of
-# duplicating it.
+# Polybar + dock: run launch.sh exactly once, here. NOTE `i3-msg reload`
+# does NOT re-run exec_always lines (only a full restart does -- verified
+# on i3 4.23: polybar's PID is unchanged across a reload). Color-only
+# switches (purple <-> green) used to look fine without this because
+# `polybar --reload` re-reads its own config when apply-theme.sh rewrites
+# colors.ini -- but mono swaps to a different bar (monobar) and starts/
+# stops the right-side dock, which only launch.sh does.
+# Never add a second polybar kill/relaunch of our own next to this one: an
+# earlier version that pkilled/relaunched polybar separately ended up with
+# duplicated bars from two kill/relaunch sequences interleaving. launch.sh
+# alone does killall -> wait until gone -> relaunch, which also mops up
+# any bar mid-way through its own --reload self-restart.
 i3-msg reload >/dev/null
+bash "$HOME/.config/polybar/launch.sh" >/dev/null 2>&1 9>&- < /dev/null
 bash "$HOME/.config/i3/set-wallpaper.sh" 9>&- &
 
 # Wait for a pkill'd pattern to actually be gone (up to ~2s) instead of a
