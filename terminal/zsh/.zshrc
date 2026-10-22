@@ -111,7 +111,15 @@ source $ZSH/oh-my-zsh.sh
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# i3 黑白主題 (mono) 用自己的 p10k 設定檔：跟這份 .zshrc 同資料夾的 .p10k-mono.zsh。
+# 在黑白主題開的終端機裡跑 `p10k configure` 只會改到它，其他主題照舊用 ~/.p10k.zsh。
+# (~/.config/rice/terminal-style 由 ~/.config/rice/apply-theme.sh 寫入；切換主題後新開的終端機生效)
+POWERLEVEL9K_CONFIG_FILE=~/.p10k.zsh
+if [[ -r ~/.config/rice/terminal-style && "$(<~/.config/rice/terminal-style)" == mono &&
+      -f ${${(%):-%x}:A:h}/.p10k-mono.zsh ]]; then
+  POWERLEVEL9K_CONFIG_FILE=${${(%):-%x}:A:h}/.p10k-mono.zsh
+fi
+[[ ! -f $POWERLEVEL9K_CONFIG_FILE ]] || source $POWERLEVEL9K_CONFIG_FILE
 export HOSTNAME=$(cat /etc/hostname)
 PROMPT='%n@%m %~ %# '
 neofetch
