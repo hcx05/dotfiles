@@ -26,6 +26,7 @@ Started/stopped by ~/.config/polybar/launch.sh (exec_always), so an i3
 reload -- including the one switch-theme.sh does -- restarts it with the
 new colors, and switching to a classic preset stops it.
 """
+import collections
 import fcntl
 import json
 import os
@@ -68,6 +69,9 @@ APPS = [
 ]
 SHOW_APPS_CMD = f"rofi -show drun -config {HOME}/.config/rofi/config.rasi"
 MAX_DOTS = 3
+SLOT_EXTRA = 12  # .app padding 4+4 + margin 2+2 around every icon (see css())
+MIN_ICON = 16    # icons never shrink below this when the dock gets crowded
+Rect = collections.namedtuple("Rect", "x y width height")
 
 
 def load_layout():
@@ -87,7 +91,6 @@ def launch(cmd):
 
 def css(layout):
     c = layout["colors"]
-    icon = layout["dock"]["icon_size"]
     # Button margin 6px + image margin 4px each side + 2px dock outline is
     # what apply-theme.sh's DOCK_WIDTH (= icon + 24) assumes -- keep in sync.
     return f"""
@@ -111,7 +114,7 @@ def css(layout):
     }}
     .dot {{ background-color: {c["foreground_alt"]}; border-radius: 2px; min-width: 4px; min-height: 4px; }}
     .app.focused .dot {{ background-color: {c["accent"]}; }}
-    .glyph {{ font-family: "{GLYPH_FONT}"; font-size: {int(icon * 0.55)}px; color: {c["foreground"]}; }}
+    .glyph {{ color: {c["foreground"]}; }}
     separator {{ background-color: {c["border_inactive"]}; min-height: 1px; margin: 6px 14px; }}
     tooltip, tooltip.background {{
         background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; border-radius: 6px;
@@ -143,6 +146,9 @@ def icon_widget(icon_names, glyph, size, extra_gicon=None):
             pass
     label = Gtk.Label(label=chr(glyph))
     label.get_style_context().add_class("glyph")
+    font = Gtk.CssProvider()  # per-label: the size follows the (shrinkable) icon size
+    font.load_from_data(f'label {{ font-family: "{GLYPH_FONT}"; font-size: {int(size * 0.55)}px; }}'.encode())
+    label.get_style_context().add_provider(font, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     label.set_size_request(size, size)
     return label
 
@@ -236,6 +242,8 @@ class DockWindow(Gtk.Window):
         x = monitor_rect.x + monitor_rect.width - gap - width
         y = monitor_rect.y + top + gap
         height = monitor_rect.height - top - 2 * gap
+        self.height = height
+        self.icon_size = None
         self.set_size_request(width, height)
         self.move(x, y)
 
@@ -246,13 +254,8 @@ class DockWindow(Gtk.Window):
         # pinned + running apps as one group, vertically centered in the
         # dock (set_center_widget centers on the whole frame, independent of
         # the Show Applications button packed at the bottom)
-        size = layout["dock"]["icon_size"]
         apps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.pinned_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        for name, icons, _regex, glyph, cmd in APPS:
-            btn = AppButton(dock, name, name, icon_widget(icons, glyph, size), cmd)
-            self.buttons[name] = btn
-            self.pinned_box.pack_start(btn, False, False, 0)
         apps_box.pack_start(self.pinned_box, False, False, 0)
 
         self.separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -261,15 +264,47 @@ class DockWindow(Gtk.Window):
         apps_box.pack_start(self.running_box, False, False, 0)
         frame.set_center_widget(apps_box)
 
-        show_apps = AppButton(dock, None, "Show Applications",
-                              icon_widget(["view-app-grid-symbolic", "view-app-grid"], 0xF00A, size),
-                              SHOW_APPS_CMD)
-        frame.pack_end(show_apps, False, False, 0)
+        self.show_apps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        frame.pack_end(self.show_apps_box, False, False, 0)
 
+        self.set_icon_size(self.fit_icon_size(len(APPS)))
         self.show_all()
         self.separator.hide()
 
-    def update(self, pinned, running, size):
+    def fit_icon_size(self, n_apps):
+        """Largest icon size (up to the theme's) at which n_apps entries fit.
+
+        Like Ubuntu's dock, icons shrink instead of the dock growing past
+        the bottom of the screen. Room is reserved for Show Applications at
+        BOTH ends, so the centered app group can never run into it; 33 =
+        2*2 outline + 2*8 padding + separator (1 + 2*6 margin).
+        """
+        fit = (self.height - 33) // (n_apps + 2) - SLOT_EXTRA
+        return max(MIN_ICON, min(self.dock.layout["dock"]["icon_size"], fit))
+
+    def set_icon_size(self, size):
+        """(Re)build every button at this icon size."""
+        self.icon_size = size
+        for box in (self.pinned_box, self.running_box, self.show_apps_box):
+            for child in box.get_children():
+                box.remove(child)
+                child.destroy()
+        self.buttons = {}
+        for name, icons, _regex, glyph, cmd in APPS:
+            btn = AppButton(self.dock, name, name, icon_widget(icons, glyph, size), cmd)
+            self.buttons[name] = btn
+            self.pinned_box.pack_start(btn, False, False, 0)
+        show_apps = AppButton(self.dock, None, "Show Applications",
+                              icon_widget(["view-app-grid-symbolic", "view-app-grid"], 0xF00A, size),
+                              SHOW_APPS_CMD)
+        self.show_apps_box.pack_start(show_apps, False, False, 0)
+        self.pinned_box.show_all()
+        self.show_apps_box.show_all()
+
+    def update(self, pinned, running):
+        size = self.fit_icon_size(len(APPS) + len(running))
+        if size != self.icon_size:
+            self.set_icon_size(size)  # also empties running_box -> rebuilt below
         for name, btn in self.buttons.items():
             if name in pinned:
                 btn.set_windows(pinned[name])
@@ -313,12 +348,21 @@ class Dock:
         threading.Thread(target=self.listen, daemon=True).start()
 
     # ---- windows per monitor --------------------------------------------
+    def monitor_rects(self):
+        # i3's active outputs, not GDK's monitor list: i3 is what places the
+        # windows (and what reserved_area.py measures against), and a
+        # running GTK process was observed keeping a stale monitor list
+        # after a RandR change that i3 had already picked up.
+        try:
+            return [Rect(o.rect.x, o.rect.y, o.rect.width, o.rect.height)
+                    for o in self.i3.get_outputs() if o.active]
+        except Exception:
+            return [w.rect for w in self.windows]  # i3 restarting -- keep as is
+
     def rebuild(self):
         for w in self.windows:
             w.destroy()
-        display = Gdk.Display.get_default()
-        self.windows = [DockWindow(self, display.get_monitor(i).get_geometry())
-                        for i in range(display.get_n_monitors())]
+        self.windows = [DockWindow(self, rect) for rect in self.monitor_rects()]
         self.queue_refresh()
 
     # ---- i3 state -> dots / focus highlight / running apps --------------
@@ -339,6 +383,12 @@ class Dock:
 
     def refresh(self):
         self.refresh_pending = False
+        # Monitor layout changed under us (VM resume re-probing the display,
+        # a screen plugged in/out)? monitors-changed doesn't always arrive,
+        # but i3's output event does -- re-place the dock from scratch.
+        if self.monitor_rects() != [w.rect for w in self.windows]:
+            self.rebuild()
+            return False
         try:
             tree = self.i3.get_tree()
             outputs = self.i3.get_outputs()
@@ -359,9 +409,8 @@ class Dock:
                 key = cls or inst or "?"
                 running.setdefault(key, (cls or inst or "Window", []))[1].append(con)
 
-        size = self.layout["dock"]["icon_size"]
         for win in self.windows:
-            win.update(pinned, running, size)
+            win.update(pinned, running)
             self.restack(win, tree, outputs)
         return False
 
@@ -372,8 +421,7 @@ class Dock:
         ws_name = None
         for o in outputs:
             r = o.rect
-            if o.active and (r.x, r.y, r.width, r.height) == (
-                    win.rect.x, win.rect.y, win.rect.width, win.rect.height):
+            if o.active and Rect(r.x, r.y, r.width, r.height) == win.rect:
                 ws_name = o.current_workspace
                 break
         fullscreen = False
