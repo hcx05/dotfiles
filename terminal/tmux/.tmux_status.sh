@@ -26,6 +26,16 @@ ip=$(hostname -I | awk '{print $1}')
 # ===== 5) TIME =====
 time=$(date +%H:%M)
 
+# ===== mono 主題：沒有底色，白字用 | 隔開 =====
+# 目前主題的終端機風格由 ~/.config/rice/apply-theme.sh 寫入，切換主題後
+# 下一次刷新 (status-interval 1) 就會換過來。
+style=$(cat "$HOME/.config/rice/terminal-style" 2>/dev/null)
+if [ "$style" = "mono" ]; then
+    printf "#[fg=white,bg=default] %s | CPU %s%% | RAM %s%% | LOAD %s | %s | %s " \
+        "$(whoami)" "$cpu" "$ram" "$load" "$time" "$ip"
+    exit 0
+fi
+
 # ===== Powerline 分隔符 =====
 SEP=""
 
