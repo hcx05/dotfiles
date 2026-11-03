@@ -8,6 +8,11 @@ export XDG_SESSION_DESKTOP=i3
 export QT_QPA_PLATFORMTHEME=qt5ct
 export GTK_THEME=Kali-Purple-Dark
 
+# Java AWT/Swing apps (Burp Suite, Ghidra, ...) assume a non-reparenting WM
+# and show a blank grey window under i3 without this. Same fix gh0stzk
+# exports in bspwmrc.
+export _JAVA_AWT_WM_NONREPARENTING=1
+
 # kitty (GLFW backend) disables ibus IME input on Linux by default -- it's
 # an opt-in-only design choice by upstream (see kitty changelog 0.19.x:
 # "Do not enable IME input via ibus unless the GLFW_IM_MODULE=ibus

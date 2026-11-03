@@ -52,6 +52,14 @@
     mouse_middle_click = do_action, close_current
     mouse_right_click = close_all
 
+    # Progress bar drawn for notifications carrying an int:value hint -- used
+    # by ~/.config/i3/osd.sh for the volume / brightness OSD.
+    progress_bar = true
+    progress_bar_height = 10
+    progress_bar_frame_width = 1
+    progress_bar_min_width = 150
+    progress_bar_max_width = 300
+
     transparency = @@TRANSPARENCY_PCT@@
 
 [experimental]
@@ -74,3 +82,9 @@
     foreground = "#@@FOREGROUND@@"
     frame_color = "#@@URGENT@@"
     timeout = 0
+
+# Volume / brightness OSD (osd.sh): short-lived, never kept in history.
+[osd]
+    appname = osd
+    history_ignore = yes
+    timeout = 2
