@@ -62,8 +62,8 @@ show_mic() {
     fi
 }
 
-brightness_pct() {  # brightnessctl -m -> dev,class,cur,pct%,max
-    brightnessctl -m 2>/dev/null | head -n1 | cut -d, -f4 | tr -d '%'
+brightness_pct() {  # brightnessctl -c backlight -m -> dev,class,cur,pct%,max
+    brightnessctl -c backlight -m 2>/dev/null | head -n1 | cut -d, -f4 | tr -d '%'
 }
 
 adjust_brightness() {  # adjust_brightness up|down
@@ -72,15 +72,15 @@ adjust_brightness() {  # adjust_brightness up|down
     [ -n "$cur" ] || return
     if [ "$1" = up ]; then
         if [ "$cur" -lt "$MIN_BRIGHTNESS" ]; then
-            brightnessctl -q set "${MIN_BRIGHTNESS}%"
+            brightnessctl -c backlight -q set "${MIN_BRIGHTNESS}%"
         else
-            brightnessctl -q set "${STEP}%+"
+            brightnessctl -c backlight -q set "${STEP}%+"
         fi
     else
         if [ "$cur" -le $(( MIN_BRIGHTNESS + STEP )) ]; then
-            brightnessctl -q set "${MIN_BRIGHTNESS}%"
+            brightnessctl -c backlight -q set "${MIN_BRIGHTNESS}%"
         else
-            brightnessctl -q set "${STEP}%-"
+            brightnessctl -c backlight -q set "${STEP}%-"
         fi
     fi
     cur=$(brightness_pct)
