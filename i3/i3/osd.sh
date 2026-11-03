@@ -37,9 +37,12 @@ volume_state() {  # volume_state <wpctl-target> -> "<percent> <muted|on>"
 show_volume() {
     local pct state icon
     read -r pct state < <(volume_state "$SINK") || return
-    if [ "$state" = muted ] || [ "$pct" -eq 0 ]; then
-        icon=audio-volume-muted
-        osd "Volume: muted" 0 "$icon"
+    if [ "$state" = muted ]; then
+        osd "Volume: muted" 0 audio-volume-muted
+        return
+    fi
+    if [ "$pct" -eq 0 ]; then
+        osd "Volume: 0%" 0 audio-volume-muted
         return
     fi
     if   [ "$pct" -lt 34 ]; then icon=audio-volume-low
