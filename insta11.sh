@@ -16,6 +16,8 @@ info "Installing required packages"
 # 這裡把 neofetch 從 apt 清單移除，改為後面手動安裝
 PACKAGES=(
     git curl zsh tmux unzip lsd htop bat ripgrep nodejs npm pipx xclip fastfetch
+    # i3 rice: osd.sh (dunstify progress bar, brightness) and media keys
+    dunst brightnessctl playerctl
 )
 
 for pkg in "${PACKAGES[@]}"; do
