@@ -181,3 +181,7 @@ alias penenv="source ~/Arsenal/pen-venv/bin/activate"
 # I3_SOCKET_PATH property on the X root window) when the var isn't set, so
 # there's no downside to never trusting an inherited value.
 unset I3SOCK
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/kali/.local/bin:$PATH"

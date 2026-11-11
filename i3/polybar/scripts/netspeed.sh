@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Prints download/upload rate for the default route interface.
-# Icon tokens (@ICO_*@) are substituted with real glyphs by
-# ~/.config/rice/apply-theme.sh -- do not paste raw icon glyphs here.
+# Compact download/upload rate for the default route interface.
+source "$HOME/.config/rice/theme.conf" 2>/dev/null
 
 IFACE=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}')
 if [ -z "$IFACE" ]; then
@@ -41,4 +40,4 @@ human() {
     fi
 }
 
-echo " $(human "$RX_RATE")/s   $(human "$TX_RATE")/s"
+echo "%{F${ACCENT_ALT:-#BDBDBD}}%{F-} $(human "$RX_RATE") %{F${FOREGROUND_ALT:-#8A8A8A}}%{F-} $(human "$TX_RATE")"

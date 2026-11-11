@@ -1,0 +1,11 @@
+# xbindkeys config for the i3 rice -- NOT ~/.xbindkeysrc (xbindkeys reads
+# that path by default; this one is launched explicitly with -f from
+# i3/config's autostart so it doesn't collide with any other xbindkeys use
+# on this machine). Its only job here is the desktop right-click menu
+# ("桌面右鍵選單"): a global passive grab on button 3 that replays the
+# click normally (xbindkeys does this by default -- it never consumes/
+# blocks the event) and ALSO runs desktop-menu.sh, which checks whether
+# the click actually landed on bare desktop background before showing
+# anything. See desktop-menu.sh's own comment for why that check is safe.
+"~/.config/i3/desktop-menu.sh"
+    b:3

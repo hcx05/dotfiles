@@ -1,45 +1,29 @@
 #!/usr/bin/env python3
-"""Toggle-maximize for the focused FLOATING window -- fills the usable
-screen area below the top polybar bar, WITHOUT covering it (unlike i3's
-`fullscreen toggle`, which covers the whole output including that bar).
-Press again to restore the previous size and position.
-
-The strips to keep clear (top bar; plus the right-side dock in the mono
-theme's "dock" layout) come from reserved_area.py, which reads them from
-the active theme's generated ~/.config/rice/layout.json -- so this doesn't
-silently drift out of sync if the bar/dock change later. There is no
-bottom bar to avoid (the taskbar bar was removed), so the window fills
-all the way down to the screen edge.
+"""Toggle between maximized (filling usable area below top bar / dock, NOT
+fullscreen) and 1920x1080 centered for the focused window.
+Works even if the window was in tiled mode (automatically enables floating).
+Bound to Super+Shift+m (and Super+m / F11).
 """
-import i3ipc
 import json
 import os
 
+import i3ipc
 from reserved_area import maximized_rect
 
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
-
+NORMAL_W, NORMAL_H = 1920, 1080
 
 
 def main():
     i3 = i3ipc.Connection()
     tree = i3.get_tree()
     win = tree.find_focused()
-    if win is None or not win.floating or "on" not in (win.floating or ""):
-        # not a floating window -- nothing sensible to do
+    if win is None or win.window is None:
         return
 
-    state = {}
-    if os.path.exists(STATE_FILE):
-        try:
-            state = json.load(open(STATE_FILE))
-        except Exception:
-            state = {}
-
-    wid = str(win.window)
-    output = win.workspace().ipc_data if win.workspace() else None
-    # find the output rect via the containing workspace's output
     ws = win.workspace()
+    if ws is None:
+        return
     out_rect = None
     for o in i3.get_outputs():
         if o.name == ws.ipc_data.get("output"):
@@ -48,22 +32,48 @@ def main():
     if out_rect is None:
         return
 
-    if wid in state:
-        # restore
-        r = state.pop(wid)
-        i3.command(f'[id={win.window}] move position {r["x"]} {r["y"]}')
-        i3.command(f'[id={win.window}] resize set {r["width"]} {r["height"]}')
+    max_x, max_y, max_w, max_h = maximized_rect(out_rect)
+
+    # Center the 1920x1080 window within the usable area (clamped if screen is smaller)
+    shrunk_w = min(NORMAL_W, max_w)
+    shrunk_h = min(NORMAL_H, max_h)
+    shrunk_x = max_x + (max_w - shrunk_w) // 2
+    shrunk_y = max_y + (max_h - shrunk_h) // 2
+
+    state = {}
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE) as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+
+    wid = str(win.window)
+    is_maximized = (
+        abs(win.rect.width - max_w) <= 24 and abs(win.rect.height - max_h) <= 24
+    )
+
+    if is_maximized:
+        # Currently maximized (or single-tiled full area) -> shrink to 1920x1080 centered
+        state.pop(wid, None)
+        i3.command(
+            f"[id={win.window}] floating enable, "
+            f"resize set {shrunk_w} px {shrunk_h} px, "
+            f"move position {shrunk_x} px {shrunk_y} px"
+        )
     else:
-        # save current geometry, then fill between the bars
+        # Currently 1920x1080 (or smaller) -> maximize to usable area below top bar
         state[wid] = {
-            "x": win.rect.x,
-            "y": win.rect.y,
-            "width": win.rect.width,
-            "height": win.rect.height,
+            "x": shrunk_x,
+            "y": shrunk_y,
+            "width": shrunk_w,
+            "height": shrunk_h,
         }
-        new_x, new_y, new_w, new_h = maximized_rect(out_rect)
-        i3.command(f'[id={win.window}] move position {new_x} {new_y}')
-        i3.command(f'[id={win.window}] resize set {new_w} {new_h}')
+        i3.command(
+            f"[id={win.window}] floating enable, "
+            f"resize set {max_w} px {max_h} px, "
+            f"move position {max_x} px {max_y} px"
+        )
 
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)

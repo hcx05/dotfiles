@@ -6,6 +6,14 @@
 # (exec_always) on every reload -- including the reload switch-theme.sh does.
 
 source "$HOME/.config/rice/theme.conf" 2>/dev/null
+# bar-selector.sh ($mod+Shift+t) overrides the theme's own LAYOUT -- see the
+# matching comment in ~/.config/rice/apply-theme.sh. Must be kept in sync:
+# this script decides which bar binary to launch, apply-theme.sh decides the
+# reserved screen space/gaps for it.
+BARSTYLE_OVERRIDE_FILE="$HOME/.config/rice/.barstyle"
+if [ -s "$BARSTYLE_OVERRIDE_FILE" ]; then
+    LAYOUT="$(tr -d ' \t\n\r' < "$BARSTYLE_OVERRIDE_FILE")"
+fi
 BAR=mainbar
 [ "${LAYOUT:-classic}" = "dock" ] && BAR=monobar
 
@@ -20,10 +28,10 @@ while pgrep -u "$UID" -x polybar >/dev/null; do sleep 0.5; killall -q polybar; d
 
 if type "xrandr" >/dev/null 2>&1; then
     for m in $(polybar --list-monitors | cut -d: -f1); do
-        MONITOR=$m polybar --reload "$BAR" -c ~/.config/polybar/config.ini &
+        MONITOR=$m setsid nohup polybar --reload "$BAR" -c ~/.config/polybar/config.ini >/tmp/polybar-"$m".log 2>&1 < /dev/null &
     done
 else
-    polybar --reload "$BAR" -c ~/.config/polybar/config.ini &
+    setsid nohup polybar --reload "$BAR" -c ~/.config/polybar/config.ini >/tmp/polybar.log 2>&1 < /dev/null &
 fi
 
 DOCK="$HOME/.config/rice/dock/dock.py"

@@ -18,8 +18,8 @@ configuration {
     font:                       "JetBrainsMono Nerd Font 11";
     disable-history:            false;
     hover-select:               true;
-    me-select-entry:            "MousePrimary";
-    me-accept-entry:            "MouseDPrimary";
+    me-select-entry:            "";
+    me-accept-entry:            "MousePrimary";
 }
 
 * {
@@ -89,12 +89,14 @@ element {
     spacing:             10px;
 }
 
-element normal.normal {
+element normal.normal,
+element alternate.normal {
     background-color: transparent;
     text-color:         @fg;
 }
 
-element selected.normal {
+element selected.normal,
+element selected.active {
     background-color: @accent;
     text-color:         @bg;
 }

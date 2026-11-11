@@ -28,7 +28,7 @@ from reserved_area import maximized_rect
 
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
 LOCK_FILE = os.path.expanduser("~/.cache/i3-default-size-daemon.lock")
-NORMAL_W, NORMAL_H = 1400, 900  # the old default size, now the toggle's "restore" size
+NORMAL_W, NORMAL_H = 1920, 1080  # the toggle's "restore" size (1920x1080)
 
 
 
@@ -43,6 +43,8 @@ def on_new_window(i3, event):
 
     win = i3.get_tree().find_by_id(event_win.id)
     if win is None:
+        return
+    if getattr(win, "window_role", None) == "pop-up" or getattr(win, "window_class", None) == "RiceAudioPopup":
         return
     ws = win.workspace()
     if ws is None:

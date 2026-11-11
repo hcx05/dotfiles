@@ -1,0 +1,63 @@
+Essentials	基本操作
+Open terminal	開啟終端機
+App launcher	應用程式啟動器
+Toggle input method (English / Zhuyin)	切換輸入法（英文／注音）
+Toggle input method (English / Zhuyin) -- tap alone, don't hold	切換輸入法（英文／注音）──單獨輕點，勿按住
+Window switcher (list all windows)	視窗切換器（列出所有視窗）
+Clipboard history picker	剪貼簿歷史選擇器
+Close focused window	關閉聚焦視窗
+Exit i3 (confirm)	結束 i3（需確認）
+Power menu (lock / theme / logout / suspend / reboot / shutdown)	電源選單（鎖定／主題／登出／暫停／重開機／關機）
+Alt-Tab	Alt-Tab 視窗切換
+Step back through recently-focused windows (MRU cycling)	依最近使用順序切換視窗
+Focus Movement	聚焦移動
+Focus left / down / up / right	聚焦切換至左／下／上／右
+Move Windows	移動視窗
+Move focused window left / down / up / right	將聚焦視窗移至左／下／上／右
+Layout / Floating / Fullscreen	版面配置／浮動／全螢幕
+Stacking layout	堆疊版面配置
+Tabbed layout	分頁版面配置
+Toggle split layout	切換分割方向
+Fullscreen toggle	切換全螢幕
+Toggle maximize (below top bar) / restore (1920x1080)	切換放大（頂欄下方最大化）／縮小（1920x1080）
+Toggle floating	切換浮動模式
+Minimize to scratchpad	最小化至暫存區
+Restore from scratchpad	從暫存區還原
+Toggle focus mode (tiling <-> floating)	切換聚焦模式（平鋪／浮動）
+Focus parent container	聚焦上層容器
+Workspaces	工作區
+Switch to workspace 1-10	切換至工作區 1-10
+Move focused window to workspace 1-10	將聚焦視窗移至工作區 1-10
+i3 Control	i3 控制
+Reload config	重新載入設定
+Restart i3 in place	原地重新啟動 i3
+Resize mode	調整大小模式
+Resize without entering a mode	不進入模式直接調整大小
+Screenshot / Lock	截圖／鎖定
+Screenshot (region, interactive)	截圖（互動式框選）
+Screenshot (full screen)	截圖（全螢幕）
+Screenshot (all screens)	截圖（所有螢幕）
+Screenshot (region, copy to clipboard)	截圖（框選並複製到剪貼簿）
+Lock screen	鎖定螢幕
+Volume / Brightness / Media	音量／亮度／媒體
+Volume up / down / mute	音量增加／減少／靜音
+Microphone mute	麥克風靜音
+Brightness up / down	亮度增加／減少
+Media play / pause / stop / next / previous	媒體播放／暫停／停止／下一首／上一首
+Desktop & Taskbar	桌面與工作列
+Desktop (theme) selector	桌面（主題）選擇器
+Taskbar (bar style) selector	工作列（狀態列樣式）選擇器
+User card (quick info & actions)	用戶卡片（快速資訊與操作）
+Right-click the desktop background for a quick menu	在桌面空白處按右鍵開啟快速選單
+Keybindings cheatsheet (this menu)	快捷鍵一覽（本選單）
+Wallpaper picker	桌布選擇器
+Hide/show the taskbar (top bar + dock)	隱藏／顯示工作列（頂部狀態列＋Dock）
+Restore a specific hidden/minimized window by name	依名稱還原特定的隱藏／最小化視窗
+Soft reload (re-apply the rice, restart its daemons, no full i3 restart)	軟重載（重新套用佈景並重啟其常駐程式，不需完整重啟 i3）
+Network / Bluetooth	網路／藍牙
+Network manager	網路管理員
+Bluetooth manager	藍牙管理員
+Window Transparency	視窗透明度
+Increase transparency on focused window	增加聚焦視窗透明度
+Decrease transparency on focused window	降低聚焦視窗透明度
+Reset transparency on focused window	重設聚焦視窗透明度

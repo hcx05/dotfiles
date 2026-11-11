@@ -77,9 +77,64 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+#
+# fzf-tab (gh0stzk-style fuzzy tab-completion previews: Tab on `cd`/`kill`/
+# etc. opens an fzf picker with a live preview instead of a plain list) is
+# cloned into $ZSH_CUSTOM/plugins/fzf-tab -- NOT part of this git repo
+# (external runtime dependency, same as oh-my-zsh/powerlevel10k themselves):
+#   git clone --depth 1 https://github.com/Aloxaf/fzf-tab ~/.oh-my-zsh/custom/plugins/fzf-tab
+# Needs `fzf` itself installed (apt install fzf) to do anything -- silently
+# falls back to zsh's normal completion menu if fzf isn't on PATH.
+# Must come before zsh-autosuggestions/zsh-syntax-highlighting below (its
+# own README's ordering requirement -- it wraps the completion widget, and
+# needs to do that before those wrap OTHER widgets).
+plugins=(git fzf-tab)
 
 source $ZSH/oh-my-zsh.sh
+
+# zsh-autosuggestions / zsh-syntax-highlighting: Kali ships these as plain
+# Debian packages under /usr/share, not as oh-my-zsh custom plugins, so
+# they're sourced directly here instead of listed in plugins=() above.
+#   sudo apt install zsh-autosuggestions zsh-syntax-highlighting
+# (already installed on this machine). syntax-highlighting's own upstream
+# docs require it be the LAST thing sourced in the whole file -- anything
+# sourced after it that defines/wraps a zle widget breaks its highlighting
+# -- see the matching source line at the very end of this file.
+[[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && \
+    source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+# Suggest from command history first, then fall back to zsh tab-completion
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+
+# -- Better completion behavior (ArchDotfiles / gh0stzk style) --
+zstyle ':completion:*' menu select                         # arrow-key menu once there's >1 match
+zstyle ':completion:*:descriptions' format '[%d]'
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"     # color completions like `ls`
+zstyle ':completion:*' matcher-list \
+    'm:{a-zA-Z}={A-Za-z}' \
+    '+r:|[._-]=* r:|=*' \
+    '+l:|=*'
+zstyle ':completion:*:*:*:*:processes' command 'ps -u $USER -o pid,user,comm -w'
+
+# fzf-tab styling & preview panes from hcx05/ArchDotfiles
+zstyle ':fzf-tab:*' fzf-flags --style=full --height=90% --pointer '>' --gutter ' ' \
+    --color 'pointer:green:bold,bg+:-1:,fg+:green:bold,info:blue:bold,marker:yellow:bold,hl:gray:bold,hl+:gray:bold' \
+    --input-label ' Search ' --color 'input-border:blue,input-label:blue:bold' \
+    --list-label ' Results ' --color 'list-border:green,list-label:green:bold' \
+    --preview-label ' Preview ' --preview-label-pos '27:bottom' --color 'preview-border:magenta,preview-label:magenta:bold'
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'lsd -1 --icon=always --color=always -a $realpath 2>/dev/null || ls --color=always $realpath'
+zstyle ':fzf-tab:complete:(ls|lsd):*' fzf-preview 'lsd -1 --icon=always --color=always -a $realpath 2>/dev/null || ls --color=always $realpath'
+zstyle ':fzf-tab:complete:(nvim|vim|cat|bcat|bat|batcat):*' fzf-preview 'batcat --color=always --theme=base16 --style=numbers $realpath 2>/dev/null || cat $realpath'
+zstyle ':fzf-tab:*' fzf-bindings 'space:accept'
+zstyle ':fzf-tab:*' accept-line enter
+zstyle ':fzf-tab:*' switch-group ',' '.'
+
+# fzf itself (Ctrl+R history search, Ctrl+T file picker, Alt+C cd picker) --
+# Debian's fzf package ships these under /usr/share/doc/fzf/examples/.
+# No-op (keys just do nothing extra) until `sudo apt install fzf`.
+[[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]] && \
+    source /usr/share/doc/fzf/examples/key-bindings.zsh
+[[ -r /usr/share/doc/fzf/examples/completion.zsh ]] && \
+    source /usr/share/doc/fzf/examples/completion.zsh
 
 # User configuration
 
@@ -173,3 +228,21 @@ alias penenv="source ~/Arsenal/pen-venv/bin/activate"
 # I3_SOCKET_PATH property on the X root window) when the var isn't set, so
 # there's no downside to never trusting an inherited value.
 unset I3SOCK
+
+# zsh-syntax-highlighting MUST be loaded before history-substring-search and
+# after all other widgets -- see the comment next to zsh-autosuggestions above.
+[[ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
+    source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+# zsh-history-substring-search (from hcx05/ArchDotfiles): type part of a command
+# and press Up/Down arrows to cycle through matching history entries.
+[[ -r $ZSH/plugins/history-substring-search/history-substring-search.zsh ]] && \
+    source $ZSH/plugins/history-substring-search/history-substring-search.zsh
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+[[ -n "${terminfo[kcuu1]}" ]] && bindkey "${terminfo[kcuu1]}" history-substring-search-up
+[[ -n "${terminfo[kcud1]}" ]] && bindkey "${terminfo[kcud1]}" history-substring-search-down
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/kali/.local/bin:$PATH"

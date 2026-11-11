@@ -16,6 +16,7 @@ info "Installing required packages"
 # 這裡把 neofetch 從 apt 清單移除，改為後面手動安裝
 PACKAGES=(
     git curl zsh tmux unzip lsd htop bat ripgrep nodejs npm pipx xclip fastfetch
+    fzf zsh-autosuggestions zsh-syntax-highlighting
     # i3 rice: osd.sh (dunstify progress bar, brightness) and media keys
     dunst brightnessctl playerctl
 )
@@ -76,6 +77,20 @@ for d in i3 polybar picom rofi dunst rice; do
     ln -sf "$DOTFILES_DIR/i3/$d" "$HOME/.config/$d"
 done
 
+# Firefox theme & startup-page (from hcx05/ArchDotfiles)
+mkdir -p "$HOME/.local/share"
+rm -rf "$HOME/.local/share/startup-page"
+ln -sf "$DOTFILES_DIR/i3/rice/startup-page" "$HOME/.local/share/startup-page"
+for ff_base in "$HOME/.mozilla/firefox" "$HOME/.config/mozilla/firefox"; do
+    [ -d "$ff_base" ] || continue
+    for ff_prof in "$ff_base"/*.default*; do
+        [ -d "$ff_prof" ] || continue
+        cp -R "$DOTFILES_DIR/i3/rice/firefox/chrome" "$ff_prof/"
+        cp "$DOTFILES_DIR/i3/rice/firefox/user.js" "$ff_prof/"
+        sed -i "s|/home/z0mbi3|$HOME|g; s|/home/kali|$HOME|g" "$ff_prof/user.js"
+    done
+done
+
 ok "All symbolic links created"
 
 # --- 4. 處理 Oh My Zsh (保持原樣) ---
@@ -88,10 +103,15 @@ fi
 mkdir -p "${HOME}/.oh-my-zsh/custom"
 ln -sf "$DOTFILES_DIR/terminal/zsh/fastfetch-dragon.zsh" "${HOME}/.oh-my-zsh/custom/fastfetch-dragon.zsh"
 
-# --- 5. 安裝 Powerlevel10k 主題 (採用穩健路徑) ---
+# --- 5. 安裝 Powerlevel10k 主題与 fzf-tab 外掛 (採用穩健路徑) ---
 P10K_DIR="${HOME}/.oh-my-zsh/custom/themes/powerlevel10k"
 if [ ! -d "$P10K_DIR" ]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
+fi
+
+FZFTAB_DIR="${HOME}/.oh-my-zsh/custom/plugins/fzf-tab"
+if [ ! -d "$FZFTAB_DIR" ]; then
+    git clone --depth=1 https://github.com/Aloxaf/fzf-tab "$FZFTAB_DIR"
 fi
 
 # --- 6.5 處理 Tmux Plugin Manager (TPM) ---

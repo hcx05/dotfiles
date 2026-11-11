@@ -18,23 +18,14 @@ SUSPEND="  $ICON_SUSPEND  Suspend"
 REBOOT="  $ICON_REBOOT  Reboot"
 POWEROFF="  $ICON_POWEROFF  Shut Down"
 
-# Theme entry opens a second list with EVERY preset (theme-*.conf), the
-# active one ticked -- pick any of them directly instead of stepping through
-# them in order. The label shows the active preset. Current preset is read
-# from the theme.conf symlink (see switch-theme.sh), not from a separate
-# state file, so it can never drift out of sync.
+# Theme entry hands off to rice-selector.sh (the "桌面選擇" desktop/rice
+# picker, also on $mod+Shift+d and a bar icon) -- a wallpaper-preview icon
+# grid instead of a plain text list, and one place to maintain instead of
+# two copies of the same preset-enumeration logic.
 CURRENT_THEME=$(basename "$(readlink -f "$HOME/.config/rice/theme.conf")")
 CURRENT_THEME="${CURRENT_THEME#theme-}"
 CURRENT_THEME="${CURRENT_THEME%.conf}"
-PRESETS=()
-for f in "$HOME/.config/rice"/theme-*.conf; do
-    base="$(basename "$f")"
-    base="${base#theme-}"
-    PRESETS+=("${base%.conf}")
-done
 THEME="  $ICON_THEME  Theme: ${CURRENT_THEME^}"
-ICON_CHECK=$(python3 -c "print(chr(0xF00C))")   # fa-check, verified against installed font
-ICON_CIRCLE=$(python3 -c "print(chr(0xF10C))")  # fa-circle_o, verified against installed font
 
 ROFI="rofi -dmenu -config $HOME/.config/rofi/config.rasi -theme-str 'window {width: 260px;} listview {lines: 6;}'"
 
@@ -56,25 +47,7 @@ confirm() {
 
 case "$choice" in
     "$LOCK")   betterlockscreen -l dimblur ;;
-    "$THEME")
-        labels=()
-        for name in "${PRESETS[@]}"; do
-            if [ "$name" = "$CURRENT_THEME" ]; then
-                labels+=("  $ICON_CHECK  ${name^}")
-            else
-                labels+=("  $ICON_CIRCLE  ${name^}")
-            fi
-        done
-        picked=$(printf '%s\n' "${labels[@]}" | eval "$ROFI" -p "Theme")
-        target=""
-        for i in "${!labels[@]}"; do
-            [ "${labels[$i]}" = "$picked" ] && target="${PRESETS[$i]}"
-        done
-        echo "$(date '+%F %T') theme picked=[$picked] target=[$target]" >> /tmp/powermenu-debug.log
-        if [ -n "$target" ] && [ "$target" != "$CURRENT_THEME" ]; then
-            nohup "$HOME/.config/rice/switch-theme.sh" "$target" >>/tmp/switch-theme.log 2>&1 &
-        fi
-        ;;
+    "$THEME")   "$HOME/.config/rice/rice-selector.sh" ;;
     "$LOGOUT")   i3-msg exit ;;
     "$SUSPEND")  systemctl suspend ;;
     "$REBOOT")   confirm && systemctl reboot ;;
