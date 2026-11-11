@@ -11,7 +11,7 @@ const CONFIG = {
 	// └─┘┴ ┴└─┘┴└─┘└─┘
 
 	// General
-	name: 'kali',
+	name: 'hcx',
 	imageBackground: false,
 	openInNewTab: true,
 	twelveHourFormat: true,
