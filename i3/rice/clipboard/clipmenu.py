@@ -158,6 +158,27 @@ def paste_into(wid):
     return True
 
 
+def clear_tmux_buffers():
+    """Delete all tmux buffers so cleared clips don't reappear via the
+    tmux-buffer merge in main() -- without this, 'Clear clipboard history'
+    only truncated clipd.py's on-disk log and old tmux-yanked entries kept
+    coming back."""
+    try:
+        names = subprocess.run(
+            ["tmux", "list-buffers", "-F", "#{buffer_name}"],
+            capture_output=True, text=True, timeout=2,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return
+    if names.returncode != 0:
+        return
+    for name in names.stdout.splitlines():
+        name = name.strip()
+        if name:
+            subprocess.run(["tmux", "delete-buffer", "-b", name],
+                           capture_output=True, timeout=2)
+
+
 def notify(msg):
     subprocess.run(["notify-send", "-t", "1500", "Clipboard", msg],
                    stderr=subprocess.DEVNULL)
@@ -222,6 +243,7 @@ def main():
         return
     if idx == clear_index:
         open(HISTORY, "w").close()
+        clear_tmux_buffers()
         notify(f"{ICO_CLEAR}  history cleared")
         return
     if 0 <= idx < len(items):

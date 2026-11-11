@@ -3,7 +3,7 @@
 # clipd.py -- tiny X-clipboard history daemon for the i3 rice.
 #
 # Nothing on this system records clipboard history (no clipman/greenclip/
-# copyq/cliphist). kitty's ctrl+shift+c, flameshot and tmux-yank all push to
+# copyq/cliphist). kitty's ctrl+shift+c, the screenshot tool and tmux-yank all push to
 # the X CLIPBOARD selection via xclip, but once it's overwritten the old
 # value is gone. This daemon polls the CLIPBOARD selection and keeps a
 # rolling history on disk so clipmenu.py can offer it back.
