@@ -6,10 +6,12 @@ the old `for_window` default used to set. This is deliberately NOT i3's
 own `fullscreen toggle` ($mod+f), which covers the top bar too; that stays
 a separate, more-than-this state.
 
-The old default (1400x900, centered) is kept as the "restore" size: it's
-written into maximize-toggle.py's own state file as if the window had just
-been maximized from that size, so pressing F11/$mod+m on a freshly-opened
-window shrinks it back down to a normal size instead of being a no-op.
+A "normal" size (a fixed share of the usable area, centered -- see
+reserved_area.normal_rect; proportional, so it fits any screen) is kept as
+the "restore" size: it's written into maximize-toggle.py's own state file as
+if the window had just been maximized from that size, so pressing F11/$mod+m
+on a freshly-opened window shrinks it back down to a normal size instead of
+being a no-op.
 
 Run persistently (started via exec_always, like alt-tab.py's daemon mode,
 so it also survives an i3 reload/restart -- see the flock guard in main()
@@ -24,11 +26,10 @@ import json
 import os
 import sys
 
-from reserved_area import maximized_rect
+from reserved_area import maximized_rect, normal_rect
 
 STATE_FILE = os.path.expanduser("~/.cache/i3-maximize-state.json")
 LOCK_FILE = os.path.expanduser("~/.cache/i3-default-size-daemon.lock")
-NORMAL_W, NORMAL_H = 1400, 900  # the old default size, now the toggle's "restore" size
 
 
 
@@ -57,8 +58,7 @@ def on_new_window(i3, event):
 
     max_x, max_y, max_w, max_h = maximized_rect(out_rect)
 
-    normal_x = out_rect.x + (out_rect.width - NORMAL_W) // 2
-    normal_y = out_rect.y + (out_rect.height - NORMAL_H) // 2
+    normal_x, normal_y, normal_w, normal_h = normal_rect(out_rect)
 
     state = {}
     if os.path.exists(STATE_FILE):
@@ -67,7 +67,7 @@ def on_new_window(i3, event):
         except Exception:
             state = {}
     state[str(win.window)] = {
-        "x": normal_x, "y": normal_y, "width": NORMAL_W, "height": NORMAL_H,
+        "x": normal_x, "y": normal_y, "width": normal_w, "height": normal_h,
     }
     with open(STATE_FILE, "w") as f:
         json.dump(state, f)

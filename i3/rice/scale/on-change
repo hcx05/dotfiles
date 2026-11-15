@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# ============================================================================
+# autoscale hook for the i3 rice -- run by ./autoscale after the screen
+# changed, with the new scale already published (state file + Xft.dpi):
+#
+#   on-change scale  <old> <new>   the display scale changed (or --force)
+#   on-change resize <old> <new>   same scale, different resolution
+#
+# scale:  regenerate every pixel size (apply-theme.sh: sizes.conf x scale),
+#         then restart i3 in place so it picks the new DPI up -- i3 reads
+#         Xft.dpi only when it starts, and its own gap/border scaling hangs
+#         off that. The restart keeps every window where it is and re-runs
+#         the exec_always lines, i.e. launch.sh brings polybar + the dock
+#         back at the new size. dunst / picom re-read their regenerated
+#         configs.
+# resize: nothing changes size, but the bar (and the dock) have to span the
+#         new screen, and the wallpaper has to be re-fitted to it.
+#
+# Before i3 is running (the session wrapper applies the scale first) this
+# only regenerates the files; i3 then simply starts with them.
+# ============================================================================
+set -u
+
+EVENT="${1:-scale}"
+RICE="$HOME/.config/rice"
+
+# The watcher that runs this was started by i3, so it carries the I3SOCK of
+# the i3 that started it -- and that path can be a different one after i3
+# restarted itself (it is whenever i3 keeps its socket in a /tmp/i3-* dir it
+# re-creates; seen on i3 4.23 without XDG_RUNTIME_DIR). With the variable
+# gone, i3-msg and i3ipc ask the X root window for the current path instead.
+unset I3SOCK
+
+i3_up() { i3-msg -t get_version >/dev/null 2>&1; }
+
+# Detached, with every inherited fd closed -- same reasoning as the long
+# comment in switch-theme.sh: a daemon must not keep a caller's lock fd open.
+spawn() { setsid nohup "$@" >/dev/null 2>&1 < /dev/null & }
+
+wait_gone() {   # process name
+    local _
+    for _ in $(seq 1 30); do
+        pgrep -u "$UID" -x "$1" >/dev/null 2>&1 || return 0
+        sleep 0.1
+    done
+}
+
+if [ "$EVENT" = scale ]; then
+    "$RICE/apply-theme.sh" >/dev/null || exit 1
+fi
+
+i3_up || exit 0   # no session yet -- the regenerated files are all it needs
+
+if [ "$EVENT" = scale ]; then
+    # `restart`, not `reload`: only a restart re-reads the DPI (and re-runs
+    # exec_always -> launch.sh). i3-msg reports an error because i3 closes
+    # the socket while re-exec'ing itself; that is the expected outcome.
+    i3-msg restart >/dev/null 2>&1
+    for _ in $(seq 1 50); do
+        sleep 0.1
+        i3_up && break
+    done
+
+    # Only what is running: this hook must not start a compositor or a
+    # notification daemon the user chose not to run.
+    if pgrep -u "$UID" -x dunst >/dev/null 2>&1; then
+        pkill -u "$UID" -x dunst
+        wait_gone dunst
+        spawn dunst
+    fi
+    # picom re-reads its config on SIGUSR1 -- no restart, no flash.
+    pkill -USR1 -u "$UID" -x picom 2>/dev/null
+else
+    # launch.sh = kill polybar -> wait -> relaunch on every monitor, plus the
+    # dock. On a scale change the i3 restart above already ran it.
+    bash "$HOME/.config/polybar/launch.sh" >/dev/null 2>&1 < /dev/null
+fi
+
+# Maximized / hand-sized floating windows: back inside the usable area,
+# which just moved (new bar height, new dock width, or a new screen size).
+python3 "$HOME/.config/i3/fix-maximized-on-output-change.py" once >/dev/null 2>&1 < /dev/null
+# feh paints the root window at the size it had; a bigger screen would show
+# the old image tiled.
+spawn bash "$HOME/.config/i3/set-wallpaper.sh"
+exit 0

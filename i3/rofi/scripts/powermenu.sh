@@ -36,7 +36,7 @@ THEME="  $ICON_THEME  Theme: ${CURRENT_THEME^}"
 ICON_CHECK=$(python3 -c "print(chr(0xF00C))")   # fa-check, verified against installed font
 ICON_CIRCLE=$(python3 -c "print(chr(0xF10C))")  # fa-circle_o, verified against installed font
 
-ROFI="rofi -dmenu -config $HOME/.config/rofi/config.rasi -theme-str 'window {width: 260px;} listview {lines: 6;}'"
+ROFI="rofi -dmenu -config $HOME/.config/rofi/config.rasi -theme-str 'window {width: 13em;} listview {lines: 6;}'"
 
 choice=$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$LOCK" "$THEME" "$LOGOUT" "$SUSPEND" "$REBOOT" "$POWEROFF" | eval "$ROFI" -p "Power")
 

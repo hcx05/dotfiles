@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+# ============================================================================
+# autoscale -- one display scale factor for the whole rice, derived from the
+# screen that is actually there, and re-derived whenever it changes.
+#
+# What it is for: the session runs in a VM whose window moves between a
+# small laptop panel and a big external monitor. The guest should follow the
+# window's resolution, and text / icons / bars / gaps should end up a
+# sensible size on both -- without a table of "at this resolution use that
+# size" anywhere.
+#
+# How: detect the screen -> compute ONE number (the scale, see scale.conf for
+# the formula and its knobs) -> publish it:
+#     ~/.cache/rice/scale.env   RICE_SCALE / RICE_DPI, read by scale-lib.sh
+#     Xft.dpi / Xcursor.size    in the X resource database, so every toolkit
+#                               (GTK, Qt, kitty, i3, ...) scales its text
+# -> run the hook next to this script (./on-change), which re-generates the
+# pixel-sized parts of the rice (design size x scale) and reloads them.
+#
+# Commands:
+#   apply [--force]   detect, and if the scale (or just the resolution)
+#                     changed: publish it and run the hook. --force: do it
+#                     even if nothing changed (session start, after editing
+#                     scale.conf or a design size)
+#   watch             stay running: follow the VM window's size (AUTOFIT)
+#                     and re-apply on every screen change. Single instance.
+#   status            show what was detected and what would be / is applied
+#   px N...           print N x scale in whole pixels (for one-off scripts;
+#                     shell code should source scale-lib.sh instead)
+#
+# This file is WM-agnostic and identical in the i3 rice (dotfiles) and the
+# bspwm rice (ArchDotfiles); only ./on-change differs between them.
+# Needs: xrandr, xrdb, awk. Uses if present: xev (instant reaction to RandR
+# events; falls back to udev events / polling), systemd-detect-virt.
+# ============================================================================
+set -u
+
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+SCALE_DIR=$(dirname "$SELF")
+STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/rice"
+STATE_FILE="$STATE_DIR/scale.env"
+HOOK="$SCALE_DIR/on-change"
+
+# Defaults -- the same values scale.conf documents; scale.conf wins.
+REF_WIDTH=1920
+REF_HEIGHT=1080
+SCALE_CURVE=0.75
+SCALE_BIAS=1.0
+SCALE_MIN=0.8
+SCALE_MAX=3.0
+SCALE_STEP=0.05
+TRUST_PHYSICAL_SIZE=auto
+VIEW_EXP=0.5
+AUTOFIT=auto
+SETTLE_SECONDS=1.0
+POLL_SECONDS=5
+CURSOR_SIZE=24
+# shellcheck source=scale.conf
+[ -r "$SCALE_DIR/scale.conf" ] && . "$SCALE_DIR/scale.conf"
+
+log() { printf 'autoscale: %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------- detect ---
+# Inside a VM? (decides whether the reported physical size can be trusted
+# and whether to follow the preferred mode). AUTOSCALE_VM=0/1 overrides.
+is_vm() {
+    case "${AUTOSCALE_VM:-}" in 1) return 0 ;; 0) return 1 ;; esac
+    if command -v systemd-detect-virt >/dev/null 2>&1; then
+        systemd-detect-virt --vm --quiet
+        return
+    fi
+    grep -qiE 'vmware|virtualbox|innotek|qemu|kvm|xen|parallels|bochs|virtual machine' \
+        /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>/dev/null
+}
+
+setting_on() {   # setting_on <yes|no|auto> -> true if on ("auto" = only in a VM)
+    case "$1" in
+        yes | true | 1) return 0 ;;
+        auto) is_vm ;;
+        *) return 1 ;;
+    esac
+}
+
+# -> "WIDTH HEIGHT MM_WIDTH MM_HEIGHT NAME" of the screen the scale is based
+# on: the primary output, else the biggest active one, else the X screen.
+detect_screen() {
+    local info=""
+    if command -v xrandr >/dev/null 2>&1; then
+        info=$(xrandr --current 2>/dev/null | awk '
+            /^Screen [0-9]+:/ {
+                for (i = 1; i <= NF; i++)
+                    if ($i == "current") { sw = $(i + 1) + 0; sh = $(i + 3) + 0 }
+            }
+            $2 == "connected" {
+                geo = ""; mw = 0; mh = 0; prim = 0; n = 0
+                for (i = 3; i <= NF; i++) {
+                    if ($i == "primary") prim = 1
+                    else if ($i ~ /^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$/) geo = $i
+                    else if ($i ~ /^[0-9]+mm$/) { if (n++ == 0) mw = $i + 0; else mh = $i + 0 }
+                }
+                if (geo == "") next          # connected but switched off
+                split(geo, g, /[x+]/)
+                area = g[1] * g[2]
+                if (!found || prim > bprim || (prim == bprim && area > barea)) {
+                    found = 1; bprim = prim; barea = area
+                    bw = g[1]; bh = g[2]; bmw = mw; bmh = mh; bname = $1
+                }
+            }
+            END {
+                if (found) {
+                    # the mm size is not rotated with the output -- line it up
+                    if ((bw > bh) != (bmw > bmh)) { t = bmw; bmw = bmh; bmh = t }
+                    print bw, bh, bmw, bmh, bname
+                } else if (sw > 0) print sw, sh, 0, 0, "screen"
+            }')
+    fi
+    if [ -z "$info" ] && command -v xdpyinfo >/dev/null 2>&1; then
+        info=$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { split($2, d, "x"); print d[1], d[2], 0, 0, "screen"; exit }')
+    fi
+    [ -n "$info" ] && printf '%s\n' "$info"
+}
+
+# compute_scale W H MMW MMH -> "SCALE DPI SOURCE RAW"
+# The whole policy lives in this one function; see scale.conf for the knobs.
+compute_scale() {
+    local trust=0
+    case "$TRUST_PHYSICAL_SIZE" in
+        yes | true | 1) trust=1 ;;
+        auto) is_vm || trust=1 ;;   # a virtual display's mm size is made up
+    esac
+    awk -v w="$1" -v h="$2" -v mw="$3" -v mh="$4" -v trust="$trust" \
+        -v rw="$REF_WIDTH" -v rh="$REF_HEIGHT" -v curve="$SCALE_CURVE" -v view="$VIEW_EXP" \
+        -v bias="$SCALE_BIAS" -v lo="$SCALE_MIN" -v hi="$SCALE_MAX" -v step="$SCALE_STEP" 'BEGIN {
+        diag = sqrt(w * w + h * h)
+        rdiag = sqrt(rw * rw + rh * rh)
+        src = "resolution"
+        raw = exp(curve * log(diag / rdiag))
+        if (trust && mw > 0 && mh > 0) {
+            inches = sqrt(mw * mw + mh * mh) / 25.4
+            dpi = diag / inches
+            # a believable panel -- not a projector / TV EDID or a typo
+            if (dpi >= 40 && dpi <= 600) {
+                raw = (dpi / 96) * exp(view * log(inches / (rdiag / 96)))
+                src = "physical"
+            }
+        }
+        s = raw * bias
+        if (s < lo) s = lo
+        if (s > hi) s = hi
+        if (step > 0) s = int(s / step + 0.5) * step
+        printf "%g %d %s %.3f\n", s, int(96 * s + 0.5), src, raw
+    }'
+}
+
+# ----------------------------------------------------------------- state ---
+load_state() {
+    RICE_SCALE=""
+    RICE_DPI=""
+    RICE_SCREEN=""
+    # shellcheck disable=SC1090
+    [ -r "$STATE_FILE" ] && . "$STATE_FILE"
+}
+
+write_state() {   # scale dpi screen source
+    mkdir -p "$STATE_DIR"
+    local tmp
+    tmp=$(mktemp "$STATE_DIR/.scale.XXXXXX") || return 1
+    cat > "$tmp" <<EOF
+# GENERATED by $SELF -- do not edit; tune scale.conf instead.
+RICE_SCALE=$1
+RICE_DPI=$2
+RICE_SCREEN=$3
+RICE_SCALE_SOURCE=$4
+EOF
+    mv -f "$tmp" "$STATE_FILE"
+}
+
+# Publish the DPI to every toolkit. -nocpp: plain "key: value" lines, no
+# need for a C preprocessor to be installed.
+publish_xresources() {   # scale dpi
+    command -v xrdb >/dev/null 2>&1 || return 0
+    local cursor
+    cursor=$(awk -v c="$CURSOR_SIZE" -v s="$1" 'BEGIN { printf "%d", c * s + 0.5 }')
+    printf 'Xft.dpi: %s\nXcursor.size: %s\n' "$2" "$cursor" | xrdb -nocpp -merge 2>/dev/null
+}
+
+xresources_dpi() { xrdb -query 2>/dev/null | awk -F'[:\t ]+' '$1 == "Xft.dpi" { print $2; exit }'; }
+
+run_hook() {   # event old_scale new_scale -- fd 8 (the watch lock) is not
+    # passed on: daemons the hook (re)starts would keep the lock held forever.
+    [ -x "$HOOK" ] || return 0
+    RICE_SCALE="$3" RICE_DPI="$NEW_DPI" "$HOOK" "$@" 8>&- || log "hook failed: $HOOK $*"
+}
+
+# ----------------------------------------------------------------- apply ---
+cmd_apply() {
+    local force=0
+    [ "${1:-}" = "--force" ] && force=1
+
+    local screen w h mw mh name
+    screen=$(detect_screen) || { log "no screen detected (is DISPLAY set?)"; return 1; }
+    read -r w h mw mh name <<<"$screen"
+
+    local scale dpi src raw
+    read -r scale dpi src raw <<<"$(compute_scale "$w" "$h" "$mw" "$mh")"
+    NEW_DPI=$dpi
+
+    load_state
+    local old_scale=$RICE_SCALE old_screen=$RICE_SCREEN event=""
+    if [ "$force" = 1 ] || [ "$scale" != "$old_scale" ]; then
+        event=scale
+    elif [ "${w}x${h}" != "$old_screen" ]; then
+        event=resize
+    fi
+
+    # A new X server starts with an empty resource database even when the
+    # scale itself is the one from last session -- always make sure it is in.
+    [ "$(xresources_dpi)" = "$dpi" ] || publish_xresources "$scale" "$dpi"
+
+    [ -n "$event" ] || return 0
+    write_state "$scale" "$dpi" "${w}x${h}" "$src" || return 1
+    log "$name ${w}x${h} -> scale $scale (dpi $dpi, from $src${old_scale:+, was $old_scale}) [$event]"
+    run_hook "$event" "${old_scale:-$scale}" "$scale"
+}
+
+# ----------------------------------------------------------------- watch ---
+# Switch every connected output whose preferred mode ("+") is not the active
+# one ("*") to it. That is how a VM tells the guest "the window is now this
+# big"; a desktop environment's settings daemon reacts to it, a bare WM
+# does not. Returns 0 if something was changed.
+autofit() {
+    setting_on "$AUTOFIT" || return 1
+    local outputs o changed=1
+    outputs=$(xrandr --current 2>/dev/null | awk '
+        $2 == "connected" { out = $1; next }
+        $2 == "disconnected" { out = ""; next }
+        out != "" && /^[ \t]+[0-9]+x[0-9]+/ && /\+/ && !/\*/ { print out; out = "" }')
+    for o in $outputs; do
+        xrandr --output "$o" --auto 2>/dev/null && changed=0
+    done
+    return $changed
+}
+
+x_alive() { xrandr --current >/dev/null 2>&1; }
+
+# Stream that produces a line whenever the screen configuration may have
+# changed. xev sees RandR events (incl. "preferred mode changed"); udev sees
+# the kernel's hotplug event; with neither, the poll timeout does the job.
+event_source() {
+    if command -v xev >/dev/null 2>&1; then
+        exec xev -root -event randr 2>/dev/null
+    elif command -v udevadm >/dev/null 2>&1; then
+        exec udevadm monitor --udev --subsystem-match=drm 2>/dev/null
+    else
+        exec sleep infinity
+    fi
+}
+
+cmd_watch() {
+    mkdir -p "$STATE_DIR"
+    # One watcher per X display. Started from the WM's autostart, which runs
+    # again on every WM reload/restart -- later copies just exit here.
+    local lock="$STATE_DIR/autoscale-${DISPLAY//[^A-Za-z0-9]/_}.lock"
+    exec 8>"$lock"
+    flock -n 8 || exit 0
+
+    local evfd timeout=0.2 rc _line
+    coproc EVENTS { event_source 8>&-; }
+    evfd=${EVENTS[0]}
+    # shellcheck disable=SC2064
+    trap "kill ${EVENTS_PID:-0} 2>/dev/null" EXIT
+    trap 'exit 0' TERM INT HUP
+
+    while :; do
+        if [ -n "$evfd" ]; then
+            IFS= read -r -t "$timeout" _line <&"$evfd"
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+                # an event is several lines, and they come in bursts --
+                # swallow the rest, follow the window right away, and
+                # re-scale only once the resolution has come to rest
+                while IFS= read -r -t 0.2 _line <&"$evfd"; do :; done
+                autofit
+                timeout=$SETTLE_SECONDS
+                continue
+            fi
+            if [ "$rc" -le 128 ]; then   # not a timeout: the stream ended
+                x_alive || exit 0        # X is gone -- the session is over
+                evfd=""                  # keep going on polling alone
+            fi
+        else
+            # `wait` (unlike a foreground sleep) lets the TERM trap run at
+            # once, so a stopped watcher releases its lock immediately.
+            sleep "$timeout" &
+            wait $!
+        fi
+        x_alive || exit 0
+        if autofit; then                 # found by polling: let it settle
+            timeout=$SETTLE_SECONDS
+            continue
+        fi
+        cmd_apply
+        timeout=$POLL_SECONDS
+    done
+}
+
+# ---------------------------------------------------------------- status ---
+cmd_status() {
+    local screen w h mw mh name scale dpi src raw
+    screen=$(detect_screen) || { echo "no screen detected (is DISPLAY set?)"; return 1; }
+    read -r w h mw mh name <<<"$screen"
+    read -r scale dpi src raw <<<"$(compute_scale "$w" "$h" "$mw" "$mh")"
+    load_state
+    cat <<EOF
+screen        $name ${w}x${h} (${mw}mm x ${mh}mm reported)
+virtual       $(is_vm && echo yes || echo no)
+based on      $src   (raw $raw, bias x$SCALE_BIAS, limits $SCALE_MIN..$SCALE_MAX, step $SCALE_STEP)
+scale         $scale   (dpi $dpi)
+applied       ${RICE_SCALE:-never} (dpi ${RICE_DPI:--}, screen ${RICE_SCREEN:--})
+Xft.dpi       $(xresources_dpi)
+autofit       $(setting_on "$AUTOFIT" && echo on || echo off) (AUTOFIT=$AUTOFIT)
+hook          $([ -x "$HOOK" ] && echo "$HOOK" || echo none)
+EOF
+}
+
+cmd_px() {
+    # shellcheck source=scale-lib.sh
+    . "$SCALE_DIR/scale-lib.sh"
+    local v
+    for v in "$@"; do scale_px "$v"; done
+}
+
+case "${1:-}" in
+    apply) shift; cmd_apply "$@" ;;
+    watch) cmd_watch ;;
+    status) cmd_status ;;
+    px) shift; cmd_px "$@" ;;
+    *) sed -n '2,/^# =\{10,\}$/p' "$SELF" | sed '$d; s/^# \{0,1\}//' ; exit 2 ;;
+esac

@@ -73,7 +73,37 @@ MORE_GLYPH = 0xF141        # fa-ellipsis_h -- "more windows" when the dock is fu
 MORE_CMD = f"rofi -show window -config {HOME}/.config/rofi/config.rasi"
 MORE_KEY = "__more__"
 MAX_DOTS = 3
-MIN_ICON = 12    # icons never shrink below this when the dock gets crowded
+
+class Sizes:
+    """Every pixel size of the dock, for the current display scale.
+
+    Nothing in this file is a fixed pixel count: the sizes that decide the
+    dock's WIDTH come ready-scaled from apply-theme.sh (layout.json "dock" --
+    they have to match the strip reserved for the dock, so there is one
+    source), and the dock's own internal design sizes go through px(), which
+    multiplies by the same scale (layout.json "scale", detected per screen by
+    ~/.config/rice/scale/autoscale). The fallbacks are only for a layout.json
+    written before those keys existed.
+    """
+
+    def __init__(self, layout):
+        scale = layout.get("scale", 1)
+        dock = layout["dock"]
+        self.px = px = lambda design: max(1, round(design * scale))
+        self.outline = dock.get("outline", px(1))              # dock border
+        self.button_margin = dock.get("button_margin", px(2))  # around a button
+        self.icon_margin = dock.get("icon_margin", px(3))      # glyph <-> button edge
+        self.min_icon = dock.get("min_icon_size", px(12))      # crowded-dock floor
+        self.padding = px(6)            # above the first / below the last entry
+        self.separator = px(1)          # pinned | running divider
+        self.separator_margin = px(4)
+        self.dot_gap = px(2)            # between window dots
+        # dock height that entries can never use
+        self.chrome = (2 * self.outline + 2 * self.padding
+                       + self.separator + 2 * self.separator_margin)
+
+
+SIZES = None  # set in main(), before any widget is built
 Rect = collections.namedtuple("Rect", "x y width height")
 
 
@@ -94,37 +124,39 @@ def launch(cmd):
 
 def css(layout):
     c = layout["colors"]
-    # Dock outline 1px + button margin 2px + icon margin 3px on each side is
-    # what apply-theme.sh's DOCK_WIDTH (= icon + 12) assumes -- keep in sync.
+    z, px = SIZES, SIZES.px
+    # Dock outline + button margin + icon margin on each side is what
+    # apply-theme.sh's DOCK_WIDTH_PX is the icon size plus -- same numbers,
+    # read from layout.json, so the two cannot drift apart.
     return f"""
     window {{ background-color: transparent; }}
     .dock {{
         background-color: {rgba(c["background"], layout["bar_transparency"])};
-        border: 1px solid {c["accent_alt"]};
-        border-radius: 8px;
-        padding: 6px 0;
+        border: {z.outline}px solid {c["accent_alt"]};
+        border-radius: {px(8)}px;
+        padding: {z.padding}px 0;
     }}
     .app {{
         background: none; background-color: transparent; background-image: none;
         border: none; box-shadow: none; outline: none; text-shadow: none;
-        border-radius: 6px; padding: 3px 0; margin: 2px 2px;
+        border-radius: {px(6)}px; padding: {z.icon_margin}px 0; margin: {z.button_margin}px {z.button_margin}px;
         min-width: 0; min-height: 0;
     }}
     .app:hover {{ background-color: {c["background_alt"]}; }}
     .app.focused {{
         background-color: {c["background_alt"]};
-        box-shadow: inset 0 0 0 1px {c["foreground_alt"]};
+        box-shadow: inset 0 0 0 {px(1)}px {c["foreground_alt"]};
     }}
-    .dot {{ background-color: {c["foreground_alt"]}; border-radius: 2px; min-width: 3px; min-height: 3px; }}
+    .dot {{ background-color: {c["foreground_alt"]}; border-radius: {px(2)}px; min-width: {z.icon_margin}px; min-height: {z.icon_margin}px; }}
     .app.focused .dot {{ background-color: {c["accent"]}; }}
     .glyph {{ color: {c["foreground"]}; }}
-    separator {{ background-color: {c["border_inactive"]}; min-height: 1px; margin: 4px 6px; }}
+    separator {{ background-color: {c["border_inactive"]}; min-height: {z.separator}px; margin: {z.separator_margin}px {px(6)}px; }}
     tooltip, tooltip.background {{
-        background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; border-radius: 6px;
+        background-color: {c["background"]}; border: {px(1)}px solid {c["accent_alt"]}; border-radius: {px(6)}px;
     }}
     tooltip label {{ color: {c["foreground"]}; }}
-    menu, .menu {{ background-color: {c["background"]}; border: 1px solid {c["accent_alt"]}; padding: 4px; }}
-    menuitem {{ color: {c["foreground"]}; padding: 6px 12px; border-radius: 6px; }}
+    menu, .menu {{ background-color: {c["background"]}; border: {px(1)}px solid {c["accent_alt"]}; padding: {px(4)}px; }}
+    menuitem {{ color: {c["foreground"]}; padding: {px(6)}px {px(12)}px; border-radius: {px(6)}px; }}
     menuitem:hover {{ background-color: {c["accent"]}; }}
     menuitem:hover label {{ color: {c["background"]}; }}
     menuitem:disabled label {{ color: {c["foreground_alt"]}; }}
@@ -154,12 +186,12 @@ class AppButton(Gtk.Button):
         self.set_tooltip_text(name)
         self.get_style_context().add_class("app")
 
-        icon.set_margin_start(3)
-        icon.set_margin_end(3)
+        icon.set_margin_start(SIZES.icon_margin)
+        icon.set_margin_end(SIZES.icon_margin)
         overlay = Gtk.Overlay()
         overlay.add(icon)
-        # dots sit in the 3px margin on the screen-edge (right) side
-        self.dots = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        # dots sit in the icon margin on the screen-edge (right) side
+        self.dots = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=SIZES.dot_gap)
         self.dots.set_halign(Gtk.Align.END)
         self.dots.set_valign(Gtk.Align.CENTER)
         overlay.add_overlay(self.dots)
@@ -172,7 +204,7 @@ class AppButton(Gtk.Button):
             self.dots.remove(child)
         for _ in range(min(len(windows), MAX_DOTS)):
             dot = Gtk.Box()
-            dot.set_size_request(3, 3)
+            dot.set_size_request(SIZES.icon_margin, SIZES.icon_margin)
             dot.get_style_context().add_class("dot")
             self.dots.pack_start(dot, False, False, 0)
         self.dots.show_all()
@@ -276,11 +308,11 @@ class DockWindow(Gtk.Window):
 
         Like Ubuntu's dock, icons shrink instead of the dock growing past
         the bottom of the screen. Room is reserved for Show Applications at
-        BOTH ends, so the centered app group can never run into it; 23 =
-        2*1 outline + 2*6 padding + separator (1 + 2*4 margin).
+        BOTH ends, so the centered app group can never run into it;
+        SIZES.chrome = 2 outlines + 2 paddings + the separator and its margins.
         """
-        fit = (self.height - 23) // (n_apps + 2) - self.dock.slot_extra
-        return max(MIN_ICON, min(self.dock.layout["dock"]["icon_size"], fit))
+        fit = (self.height - SIZES.chrome) // (n_apps + 2) - self.dock.slot_extra
+        return max(SIZES.min_icon, min(self.dock.layout["dock"]["icon_size"], fit))
 
     def set_icon_size(self, size):
         """(Re)build every button at this icon size."""
@@ -302,10 +334,10 @@ class DockWindow(Gtk.Window):
         self.show_apps_box.show_all()
 
     def update(self, pinned, running):
-        # Even at MIN_ICON there's a hard limit: past it, show the running
+        # Even at the minimum icon size there's a hard limit: past it, show the running
         # apps that fit and turn the last slot into "more windows" (rofi's
         # window switcher) instead of letting the dock run off the screen.
-        max_entries = (self.height - 23) // (MIN_ICON + self.dock.slot_extra) - 2
+        max_entries = (self.height - SIZES.chrome) // (SIZES.min_icon + self.dock.slot_extra) - 2
         overflow = len(APPS) + len(running) > max_entries
         if overflow:
             running = dict(list(running.items())[:max(0, max_entries - len(APPS) - 1)])
@@ -350,7 +382,7 @@ class Dock:
         provider.load_from_data(css(layout).encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-        self.slot_extra = measure_slot_extra({MIN_ICON, layout["dock"]["icon_size"]})
+        self.slot_extra = measure_slot_extra({SIZES.min_icon, layout["dock"]["icon_size"]})
 
         Gdk.Screen.get_default().connect("monitors-changed", lambda *_: self.rebuild())
         self.rebuild()
@@ -505,6 +537,8 @@ def main():
     if layout.get("layout") != "dock":
         sys.exit(0)  # active preset uses the classic layout -- no dock
 
+    global SIZES
+    SIZES = Sizes(layout)
     GLib.set_prgname("rice-dock")
     Dock(layout)
     Gtk.main()
