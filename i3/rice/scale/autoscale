@@ -18,10 +18,13 @@
 # pixel-sized parts of the rice (design size x scale) and reloads them.
 #
 # Commands:
-#   apply [--force]   detect, and if the scale (or just the resolution)
+#   apply [--force] [--no-hook]
+#                     detect, and if the scale (or just the resolution)
 #                     changed: publish it and run the hook. --force: do it
 #                     even if nothing changed (session start, after editing
-#                     scale.conf or a design size)
+#                     scale.conf or a design size). --no-hook: publish only
+#                     -- for a caller that applies the sizes itself right
+#                     after (a WM startup file the hook would re-trigger)
 #   watch             stay running: follow the VM window's size (AUTOFIT)
 #                     and re-apply on every screen change. Single instance.
 #   status            show what was detected and what would be / is applied
@@ -194,8 +197,13 @@ run_hook() {   # event old_scale new_scale -- fd 8 (the watch lock) is not
 
 # ----------------------------------------------------------------- apply ---
 cmd_apply() {
-    local force=0
-    [ "${1:-}" = "--force" ] && force=1
+    local force=0 hook=1 arg
+    for arg in "$@"; do
+        case "$arg" in
+            --force) force=1 ;;
+            --no-hook) hook=0 ;;
+        esac
+    done
 
     local screen w h mw mh name
     screen=$(detect_screen) || { log "no screen detected (is DISPLAY set?)"; return 1; }
@@ -220,6 +228,7 @@ cmd_apply() {
     [ -n "$event" ] || return 0
     write_state "$scale" "$dpi" "${w}x${h}" "$src" || return 1
     log "$name ${w}x${h} -> scale $scale (dpi $dpi, from $src${old_scale:+, was $old_scale}) [$event]"
+    [ "$hook" = 1 ] || return 0
     run_hook "$event" "${old_scale:-$scale}" "$scale"
 }
 
