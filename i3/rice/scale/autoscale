@@ -45,21 +45,26 @@ STATE_FILE="$STATE_DIR/scale.env"
 HOOK="$SCALE_DIR/on-change"
 
 # Defaults -- the same values scale.conf documents; scale.conf wins.
-REF_WIDTH=1920
-REF_HEIGHT=1080
-SCALE_CURVE=0.75
-SCALE_BIAS=1.0
-SCALE_MIN=0.8
-SCALE_MAX=3.0
-SCALE_STEP=0.05
-TRUST_PHYSICAL_SIZE=auto
-VIEW_EXP=0.5
-AUTOFIT=auto
-SETTLE_SECONDS=1.0
-POLL_SECONDS=5
-CURSOR_SIZE=24
-# shellcheck source=scale.conf
-[ -r "$SCALE_DIR/scale.conf" ] && . "$SCALE_DIR/scale.conf"
+# Re-read on every check of the watcher: a watcher computing with a stale
+# copy of scale.conf would fight every fresh `apply` (endless WM restarts).
+load_conf() {
+    REF_WIDTH=1920
+    REF_HEIGHT=1080
+    SCALE_CURVE=0.75
+    SCALE_BIAS=1.0
+    SCALE_MIN=0.8
+    SCALE_MAX=3.0
+    SCALE_STEP=0.05
+    TRUST_PHYSICAL_SIZE=auto
+    VIEW_EXP=0.5
+    AUTOFIT=auto
+    SETTLE_SECONDS=1.0
+    POLL_SECONDS=5
+    CURSOR_SIZE=24
+    # shellcheck source=scale.conf
+    [ -r "$SCALE_DIR/scale.conf" ] && . "$SCALE_DIR/scale.conf"
+}
+load_conf
 
 log() { printf 'autoscale: %s\n' "$*" >&2; }
 
@@ -304,6 +309,7 @@ cmd_watch() {
             wait $!
         fi
         x_alive || exit 0
+        load_conf
         if autofit; then                 # found by polling: let it settle
             timeout=$SETTLE_SECONDS
             continue
