@@ -198,3 +198,8 @@ user_pref("general.smoothScroll.msdPhysics.enabled", false); // [FF122+ Nightly]
  * 0=blank, 1=home, 2=last visited page, 3=resume previous session*/
 user_pref("browser.startup.page", 1);
 user_pref("browser.startup.homepage", "file:///home/kali/.local/share/startup-page/index.html");
+
+
+/* Rice override: shrink Firefox UI + page content below the default size.
+ * 1.0 = default; lower = smaller. Raise back toward 1.0 to undo. */
+user_pref("layout.css.devPixelsPerPx", "0.9");
