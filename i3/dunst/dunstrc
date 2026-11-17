@@ -6,7 +6,7 @@
     monitor = 0
     follow = mouse
     origin = top-right
-    offset = (46, 48)
+    offset = (12, 40)
     scale = 0
     notification_limit = 5
 
