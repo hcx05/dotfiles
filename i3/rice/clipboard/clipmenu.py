@@ -190,7 +190,7 @@ def run_rofi(lines, prompt):
         ["rofi", "-dmenu", "-i", "-format", "i",
          "-config", ROFI_CONFIG,
          "-p", prompt,
-         "-theme-str", "window {width: 760px;} listview {lines: 12;}"],
+         "-theme-str", "window {width: 38em;} listview {lines: 12;}"],
         input="\n".join(lines), capture_output=True, text=True,
     )
     sel = proc.stdout.strip()

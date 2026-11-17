@@ -1,12 +1,57 @@
 #!/usr/bin/env bash
-# Regenerates every color file derived from ~/.config/rice/theme.conf.
-# Run this after editing theme.conf, then reload i3 (Mod+Shift+c) and
-# restart polybar/picom/dunst (or just log out and back in).
+# Regenerates every color AND size file of the rice:
+#   colors  from ~/.config/rice/theme.conf
+#   sizes   from ~/.config/rice/sizes.conf (design px at scale 1.0), each
+#           multiplied by the display scale ~/.config/rice/scale/autoscale
+#           detected for the current screen -- nothing below writes a pixel
+#           size that did not go through px().
+# Run this after editing either file, then reload i3 (Mod+Shift+c) and
+# restart polybar/picom/dunst (or just log out and back in). A screen change
+# re-runs it by itself (scale/on-change).
 set -euo pipefail
 
 THEME_DIR="$HOME/.config/rice"
+# Sizes first, theme second: a preset may override any design size.
+# shellcheck source=sizes.conf
+source "$THEME_DIR/sizes.conf"
 # shellcheck source=theme.conf
 source "$THEME_DIR/theme.conf"
+# RICE_SCALE / RICE_DPI (1 / 96 until autoscale has run once) + scale_px
+# shellcheck source=scale/scale-lib.sh
+source "$THEME_DIR/scale/scale-lib.sh"
+
+# design px -> px on this screen
+px() { scale_px "$1"; }
+
+# i3 scales the pixel values in its config BY ITSELF -- ceil(value * dpi/96)
+# -- but only once Xft.dpi/96 reaches 1.25; below that it uses them as they
+# are (measured on i3 4.23: dpi 115 -> untouched, dpi 120 -> x1.25). So a
+# size that has to come out as N real pixels is written as:
+#   i3_conf_px N       the config value that lands closest to N
+#   i3_conf_px N up    ... that lands on N or just above (strips that must
+#                      not be undercut: the bar / dock reservation)
+# and i3_real_px V is what i3 then really draws for a config value V.
+i3_conf_px() {
+  awk -v e="$1" -v d="$RICE_DPI" -v mode="${2:-}" 'BEGIN {
+    s = d / 96
+    if (s < 1.25) { print e; exit }
+    x = e / s
+    # the outer gap is negative, so round away from zero by sign, not with
+    # int(x + 0.5) -- that truncates towards zero and loses a pixel there
+    if (mode == "up") x = (x > int(x)) ? int(x) + 1 : int(x)
+    else x = (x >= 0) ? int(x + 0.5) : -int(-x + 0.5)
+    if (e > 0 && x < 1) x = 1
+    print x
+  }'
+}
+i3_real_px() {
+  awk -v x="$1" -v d="$RICE_DPI" 'BEGIN {
+    s = d / 96
+    if (s < 1.25) { print x; exit }
+    v = x * s
+    print (v > int(v)) ? int(v) + 1 : int(v)
+  }'
+}
 
 strip_hash() { echo "${1#\#}"; }
 
@@ -98,40 +143,64 @@ if [ -s "$BARSTYLE_OVERRIDE_FILE" ]; then
     LAYOUT="$(tr -d ' \t\n\r' < "$BARSTYLE_OVERRIDE_FILE")"
 fi
 LAYOUT="${LAYOUT:-classic}"
-EDGE_GAP="${EDGE_GAP:-8}"
+# The monobar's width / horizontal offset are percentages of the screen (a
+# centered island), not pixel sizes -- they never go through px().
 TOPBAR_WIDTH="${TOPBAR_WIDTH:-76%}"
 TOPBAR_OFFSET_X="${TOPBAR_OFFSET_X:-12%}"
-TOPBAR_HEIGHT="${TOPBAR_HEIGHT:-26}"
-TOPBAR_BORDER="${TOPBAR_BORDER:-2}"
-DOCK_ICON_SIZE="${DOCK_ICON_SIZE:-18}"
-DOCK_LENGTH="${DOCK_LENGTH:-0.85}"   # max fraction of screen height before dock icons shrink
-# icon + 2*(dock outline 1 + button margin 1 + icon margin 2) -- keep in
-# sync with the CSS in dock.py (18 + 8 = 26px, matching mainbar height)
-DOCK_WIDTH=$((DOCK_ICON_SIZE + 8))
-WINDOW_MARGIN=4   # gap kept around maximized/tiled windows at screen edges
-I3_INNER_GAP=$(awk '$1=="gaps" && $2=="inner" {print $3; exit}' "$I3_CONFIG")
-I3_INNER_GAP="${I3_INNER_GAP:-0}"
-EDGE_OUTER_GAP=$((WINDOW_MARGIN - I3_INNER_GAP))
+
+# Every design size from sizes.conf / the preset, in real px for this screen.
+# (DOCK_LENGTH is a ratio of the screen height, not a size -- not scaled.)
+GAP_INNER_PX=$(px "$GAP_INNER")
+GAP_OUTER_PX=$(px "$GAP_OUTER")
+BORDER_PX=$(px "$BORDER_WIDTH")
+FLOAT_BORDER_PX=$(px "$FLOAT_BORDER_WIDTH")
+WINDOW_MARGIN_PX=$(px "$WINDOW_MARGIN")   # gap kept around maximized windows
+MAINBAR_HEIGHT_PX=$(px "$MAINBAR_HEIGHT")
+EDGE_GAP_PX=$(px "$EDGE_GAP")
+TOPBAR_HEIGHT_PX=$(px "$TOPBAR_HEIGHT")
+TOPBAR_BORDER_PX=$(px "$TOPBAR_BORDER")
+DOCK_ICON_PX=$(px "$DOCK_ICON_SIZE")
+DOCK_MIN_ICON_PX=$(px "$DOCK_MIN_ICON_SIZE")
+DOCK_OUTLINE_PX=$(px "$DOCK_OUTLINE")
+DOCK_BUTTON_MARGIN_PX=$(px "$DOCK_BUTTON_MARGIN")
+DOCK_ICON_MARGIN_PX=$(px "$DOCK_ICON_MARGIN")
+# icon + (outline + button margin + icon margin) on both sides; dock.py
+# builds its CSS from these same three numbers (via layout.json)
+DOCK_WIDTH_PX=$((DOCK_ICON_PX + 2 * (DOCK_OUTLINE_PX + DOCK_BUTTON_MARGIN_PX + DOCK_ICON_MARGIN_PX)))
+
+# i3's own gaps / borders, written the way i3 needs them (see i3_conf_px).
+I3_GAP_INNER=$(i3_conf_px "$GAP_INNER_PX")
+I3_GAP_INNER_REAL=$(i3_real_px "$I3_GAP_INNER")
+# i3 puts inner + outer at a workspace edge, so the outer gap is what is
+# left of WINDOW_MARGIN after the inner one -- normally negative. That is
+# what makes a tiled window sit on the exact same margin as a "maximized"
+# floating one (sizes.conf GAP_OUTER is the floor for it).
+I3_GAP_OUTER=$(i3_conf_px $((WINDOW_MARGIN_PX - I3_GAP_INNER_REAL)))
+replace_i3_block "GENERATED SCALE" "# BEGIN GENERATED SCALE (regenerated by ~/.config/rice/apply-theme.sh)
+gaps inner $I3_GAP_INNER
+gaps outer $I3_GAP_OUTER
+default_border pixel $(i3_conf_px "$BORDER_PX")
+default_floating_border pixel $(i3_conf_px "$FLOAT_BORDER_PX")
+# END GENERATED SCALE"
 
 if [ "$LAYOUT" = "dock" ]; then
-  RESERVED_TOP=$((EDGE_GAP + TOPBAR_HEIGHT + 2 * TOPBAR_BORDER))
-  RESERVED_RIGHT=$((EDGE_GAP + DOCK_WIDTH))
-  # i3 puts inner + outer gap at a workspace edge, hence "- inner" here on all
-  # 4 sides so tiled windows align to the exact same margin as floating ones.
+  RESERVED_TOP=$((EDGE_GAP_PX + TOPBAR_HEIGHT_PX + 2 * TOPBAR_BORDER_PX))
+  RESERVED_RIGHT=$((EDGE_GAP_PX + DOCK_WIDTH_PX))
+  # i3 puts inner + outer gap at a workspace edge, hence "- inner" here.
+  # smart_gaps has to go off: with it on, a lone tiled window gets no gaps
+  # at all and would slide under the bar/dock.
   I3_LAYOUT_LINES="smart_gaps off
-gaps outer $EDGE_OUTER_GAP
-gaps top $((RESERVED_TOP + WINDOW_MARGIN - I3_INNER_GAP))
-gaps right $((RESERVED_RIGHT + WINDOW_MARGIN - I3_INNER_GAP))"
-  DUNST_OFFSET="($((RESERVED_RIGHT + 12)), $((RESERVED_TOP + 10)))"
+gaps top $(i3_conf_px $((RESERVED_TOP + WINDOW_MARGIN_PX - I3_GAP_INNER_REAL)) up)
+gaps right $(i3_conf_px $((RESERVED_RIGHT + WINDOW_MARGIN_PX - I3_GAP_INNER_REAL)) up)"
 else
-  RESERVED_TOP=$(awk '/^\[bar\/mainbar\]/{f=1; next} /^\[/{f=0} f && $1=="height" {print $3; exit}' \
-    "$HOME/.config/polybar/config.ini")
-  RESERVED_TOP="${RESERVED_TOP:-26}"
+  RESERVED_TOP=$MAINBAR_HEIGHT_PX
   RESERVED_RIGHT=0
-  I3_LAYOUT_LINES="smart_gaps off
-gaps outer $EDGE_OUTER_GAP"
-  DUNST_OFFSET="(12, 40)"
+  I3_LAYOUT_LINES="# classic layout -- nothing to override"
 fi
+# dunst multiplies its whole geometry -- this offset included -- by its own
+# `scale` (set to ours in the dunst section), so it gets design units: the
+# reserved strips converted back, plus the margin.
+DUNST_OFFSET="($(($(scale_div "$RESERVED_RIGHT") + NOTIFY_MARGIN_X)), $(($(scale_div "$RESERVED_TOP") + NOTIFY_MARGIN_Y)))"
 
 replace_i3_block "GENERATED LAYOUT" "# BEGIN GENERATED LAYOUT (regenerated by ~/.config/rice/apply-theme.sh)
 $I3_LAYOUT_LINES
@@ -141,10 +210,13 @@ cat > "$THEME_DIR/layout.json" <<EOF
 {
   "_comment": "GENERATED by ~/.config/rice/apply-theme.sh -- do not edit by hand. Source of truth: ~/.config/rice/theme.conf",
   "layout": "$LAYOUT",
+  "scale": $RICE_SCALE,
   "reserved": {"top": $RESERVED_TOP, "right": $RESERVED_RIGHT, "bottom": 0, "left": 0},
-  "window_margin": $WINDOW_MARGIN,
-  "edge_gap": $EDGE_GAP,
-  "dock": {"width": $DOCK_WIDTH, "icon_size": $DOCK_ICON_SIZE, "length": $DOCK_LENGTH},
+  "window_margin": $WINDOW_MARGIN_PX,
+  "edge_gap": $EDGE_GAP_PX,
+  "dock": {"width": $DOCK_WIDTH_PX, "icon_size": $DOCK_ICON_PX, "min_icon_size": $DOCK_MIN_ICON_PX,
+           "outline": $DOCK_OUTLINE_PX, "button_margin": $DOCK_BUTTON_MARGIN_PX, "icon_margin": $DOCK_ICON_MARGIN_PX,
+           "length": $DOCK_LENGTH},
   "colors": {
     "background": "$BACKGROUND", "background_alt": "$BACKGROUND_ALT",
     "foreground": "$FOREGROUND", "foreground_alt": "$FOREGROUND_ALT",
@@ -174,14 +246,32 @@ EOF
 
 cat > "$HOME/.config/polybar/layout.ini" <<EOF
 ; GENERATED by ~/.config/rice/apply-theme.sh -- do not edit by hand.
-; Source of truth: ~/.config/rice/theme.conf (EDGE_GAP / TOPBAR_*)
-; Geometry of bar/monobar (LAYOUT="dock"); launch.sh picks which bar to run.
+; Source of truth: ~/.config/rice/sizes.conf (+ the preset's overrides),
+; times the display scale (${RICE_SCALE}) from ~/.config/rice/scale/autoscale.
+; Every pixel size of both bars; launch.sh picks which bar to run.
 [layout]
+; text: point sizes follow this dpi, the px offset is scaled here.
+; Both bars share these five slots -- polybar also falls back through them
+; in order for glyphs a font does not have, which is what font-4 is for
+; (CJK): dropping it turns Chinese in the bar into boxes.
+dpi = ${RICE_DPI}
+font-0 = "${BAR_FONT}:style=${BAR_FONT_STYLE}:size=${BAR_FONT_SIZE};$(px "$BAR_FONT_OFFSET")"
+font-1 = "${BAR_ICON_FONT}:size=${BAR_ICON_FONT_SIZE};$(px "$BAR_ICON_FONT_OFFSET")"
+font-2 = "${BAR_ICON_FONT}:size=${BAR_ICON_LG_FONT_SIZE};$(px "$BAR_ICON_LG_FONT_OFFSET")"
+font-3 = "${BAR_FONT}:size=${BAR_GLYPH_FONT_SIZE};$(px "$BAR_GLYPH_FONT_OFFSET")"
+font-4 = "${BAR_CJK_FONT}:size=${BAR_CJK_FONT_SIZE};$(px "$BAR_CJK_FONT_OFFSET")"
+line-size = $(px "$BAR_LINE_SIZE")
+tray-spacing = $(px "$TRAY_SPACING")px
+; bar/mainbar (LAYOUT="classic")
+mainbar-height = ${MAINBAR_HEIGHT_PX}
+; bar/monobar (LAYOUT="dock") -- a centered island: width/offset-x are
+; percentages of the screen, only offset-y is a pixel size.
 monobar-width = ${TOPBAR_WIDTH}
 monobar-offset-x = ${TOPBAR_OFFSET_X}
-monobar-offset-y = ${EDGE_GAP}
-monobar-height = ${TOPBAR_HEIGHT}
-monobar-border = ${TOPBAR_BORDER}
+monobar-offset-y = ${EDGE_GAP_PX}
+monobar-height = ${TOPBAR_HEIGHT_PX}
+monobar-border = ${TOPBAR_BORDER_PX}
+monobar-radius = $(px "$TOPBAR_RADIUS")
 EOF
 
 # -------------------------------------------------------------- rofi -----
@@ -201,7 +291,21 @@ cat > "$HOME/.config/rofi/colors.rasi" <<EOF
 }
 EOF
 
+# Text size only: rofi does not read Xft.dpi by itself (rofi 1.7.5), and the
+# theme's own sizes are all in em, i.e. relative to this text.
+cat > "$HOME/.config/rofi/scale.rasi" <<EOF
+/* GENERATED by ~/.config/rice/apply-theme.sh -- do not edit by hand. */
+/* Display scale ${RICE_SCALE} from ~/.config/rice/scale/autoscale. */
+configuration {
+    dpi: ${RICE_DPI};
+}
+EOF
+
 # -------------------------------------------------------------- kitty ----
+# Unlike dunst/picom/rofi/polybar, this repo does not ship a kitty config
+# dir for the installer to symlink -- without this, `set -e` aborted here
+# and left the tmux/dunst/picom files below ungenerated.
+mkdir -p "$HOME/.config/kitty"
 cat > "$HOME/.config/kitty/colors.conf" <<EOF
 # GENERATED by ~/.config/rice/apply-theme.sh -- do not edit by hand.
 # Source of truth: ~/.config/rice/theme.conf
@@ -270,6 +374,7 @@ sed \
   -e "s/@@URGENT@@/${URGENT_NOHASH}/g" \
   -e "s/@@TRANSPARENCY_PCT@@/${DUNST_TRANSPARENCY_PCT}/g" \
   -e "s/@@OFFSET@@/${DUNST_OFFSET}/g" \
+  -e "s/@@SCALE@@/${RICE_SCALE}/g" \
   "$THEME_DIR/dunstrc.template" > "$HOME/.config/dunst/dunstrc"
 
 # -------------------------------------------------------------- picom ----
@@ -278,6 +383,9 @@ BAR_TRANSPARENCY_PCT=$(awk -v t="$BAR_TRANSPARENCY" 'BEGIN{printf "%d", (t*100)+
 sed \
   -e "s/@@TRANSPARENCY_PCT@@/${TRANSPARENCY_PCT}/g" \
   -e "s/@@BAR_TRANSPARENCY_PCT@@/${BAR_TRANSPARENCY_PCT}/g" \
+  -e "s/@@CORNER_RADIUS@@/$(px "$CORNER_RADIUS")/g" \
+  -e "s/@@SHADOW_RADIUS@@/$(px "$SHADOW_RADIUS")/g" \
+  -e "s/@@SHADOW_OFFSET@@/$(px "$SHADOW_OFFSET")/g" \
   "$THEME_DIR/picom.conf.template" > "$HOME/.config/picom/picom.conf"
 
 # ---------------------------------------------- firefox & startup-page ---

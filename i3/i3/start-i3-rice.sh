@@ -22,6 +22,14 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 # kitty is neither). Safe to leave set even for non-kitty children.
 export GLFW_IM_MODULE=ibus
 
+# Display scale: detect the screen and publish the scale (Xft.dpi + the
+# regenerated gap/bar/dock sizes) BEFORE i3 starts -- i3 reads the DPI only
+# when it starts, so this is what makes its very first frame the right size.
+# --force: also regenerate when the scale is the same as last session (the
+# generated files may have come from a `git pull`). From here on the watcher
+# in i3's autostart (`autoscale watch`) keeps following screen changes.
+"$HOME/.config/rice/scale/autoscale" apply --force >/dev/null 2>&1 || true
+
 # Do NOT export XMODIFIERS/GTK_IM_MODULE/QT_IM_MODULE/CLUTTER_IM_MODULE here --
 # im-launch (Debian/Kali's im-config wrapper) only sets them up and starts
 # ibus-daemon if they are still unset when it runs. Pre-setting them would
