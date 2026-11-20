@@ -204,7 +204,7 @@ alias bcat='batcat'
 
 export GOROOT=/usr/local/go
 export GOPATH=$HOME/go
-export PATH=$PATH:$GOROOT/bin:$GOPATH/bini
+export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 alias penenv="source ~/Arsenal/pen-venv/bin/activate"
 
 # ~/Arsenal 工具說明 (已透過 ~/.local/bin 的 symlink/wrapper 加入 PATH，可直接執行)
