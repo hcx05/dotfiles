@@ -79,6 +79,10 @@ PACKAGES=(
     zsh tmux ncurses-term zsh-autosuggestions zsh-syntax-highlighting
     lsd bat ripgrep fzf fd-find fastfetch
     libreadline-dev libncurses-dev ruby ruby-dev
+    # RDP。xauth 是 SSH X11 轉發的必要條件：sshd 的 xauthlocation 指向 /usr/bin/xauth，
+    # 檔案不存在時轉發會「靜默失敗」（DISPLAY 根本不會被設起來），極難查。
+    # x11-utils 提供 xdpyinfo，是驗證 X 轉發到底有沒有通的最快方法。
+    xauth x11-utils freerdp3-x11
     # 連線層。mosh 需要 GCP 防火牆另外開 UDP 60000-61000，否則裝了也連不進來。
     mosh openvpn proxychains4 iperf3 mtr-tiny rsync
     # recon / exploit
@@ -88,10 +92,11 @@ PACKAGES=(
 )
 for pkg in "${PACKAGES[@]}"; do apt_install "$pkg"; done
 
-# Debian 把 bat 叫 batcat、fd 叫 fdfind
+# Debian 把 bat 叫 batcat、fd 叫 fdfind、FreeRDP 3 的執行檔只叫 xfreerdp3
 mkdir -p "$HOME/.local/bin"
-[ -x /usr/bin/batcat ] && ln -sf /usr/bin/batcat "$HOME/.local/bin/bat"
-[ -x /usr/bin/fdfind ] && ln -sf /usr/bin/fdfind "$HOME/.local/bin/fd"
+[ -x /usr/bin/batcat ]    && ln -sf /usr/bin/batcat    "$HOME/.local/bin/bat"
+[ -x /usr/bin/fdfind ]    && ln -sf /usr/bin/fdfind    "$HOME/.local/bin/fd"
+[ -x /usr/bin/xfreerdp3 ] && ln -sf /usr/bin/xfreerdp3 "$HOME/.local/bin/xfreerdp"
 
 phase "2. neovim（Debian 倉庫只有 0.10.4，lazy-lock.json 需要 0.11.x）"
 NVIM_WANT=v0.11.6
