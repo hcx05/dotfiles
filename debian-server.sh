@@ -222,9 +222,17 @@ else
     phase "8. Metasploit — 依 --no-msf 跳過"
 fi
 
-phase "9. pivot 需要的系統設定"
+phase "9. 系統設定"
 echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-htb-forward.conf >/dev/null
-sudo /usr/sbin/sysctl -q -p /etc/sysctl.d/99-htb-forward.conf && ok "ip_forward=1（持久化）"
+sudo /usr/sbin/sysctl -q -p /etc/sysctl.d/99-htb-forward.conf && ok "ip_forward=1（持久化，pivot 用）"
+
+# 雲端機器預設 UTC，但 tmux 狀態列的時間要跟使用者所在時區一致才有用
+TZ_WANT=Asia/Taipei
+if [ "$(timedatectl show -p Timezone --value 2>/dev/null)" = "$TZ_WANT" ]; then
+    ok "時區已是 $TZ_WANT"
+else
+    sudo timedatectl set-timezone "$TZ_WANT" && ok "時區 -> $TZ_WANT" || warn "FAILED: set-timezone"
+fi
 
 phase "10. dotfiles：oh-my-zsh + p10k + fzf-tab"
 # .zshrc 無條件呼叫 neofetch，Debian 13 已經把它移出倉庫（上游封存），所以抓 binary
@@ -278,8 +286,24 @@ bind ] paste-buffer
 
 # 遠端 session 要活過斷線，scrollback 開大
 set -g history-limit 50000
+
+# mono 狀態列：跟本地桌面一致，去底色只留白字。repo 的 .tmux.conf 設的是
+# bg=black，而它接著 source 的 ~/.config/rice/tmux-theme.conf（本地由
+# apply-theme.sh 產生）在這台不存在，所以得在這裡覆寫。
+set -g status-style bg=default,fg=white
 TMUXEOF
 ok "~/.tmux.conf wrapper"
+
+# .tmux_status.sh 硬編碼讀 ~/.config/rice/terminal-style，內容是 mono 才走無色分支。
+# 在有 i3 rice 的機器上那個路徑是 symlink 指進 repo（i3/rice/terminal-style），
+# 寫下去會污染 repo 並改掉桌面主題，所以只在它不是 symlink 時才動。
+if [ -L "$HOME/.config/rice" ]; then
+    warn "~/.config/rice 是 symlink（i3 rice 存在）— 跳過 terminal-style，避免寫進 repo"
+else
+    mkdir -p "$HOME/.config/rice"
+    printf 'mono\n' > "$HOME/.config/rice/terminal-style"
+    ok "terminal-style = mono（狀態列走無色分支）"
+fi
 
 # /usr/sbin 不在 Debian 的非 root PATH 裡，但 openvpn、tcpdump、john 都在那
 cat > "$HOME/.zshenv" <<'ENVEOF'
