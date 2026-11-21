@@ -83,6 +83,12 @@ PACKAGES=(
     # 檔案不存在時轉發會「靜默失敗」（DISPLAY 根本不會被設起來），極難查。
     # x11-utils 提供 xdpyinfo，是驗證 X 轉發到底有沒有通的最快方法。
     xauth x11-utils freerdp3-x11
+    # 遠端顯示。本地直連 HTB target 的 RDP 會在 NLA/CredSSP 協商階段 timeout
+    # （跨太平洋 ~195ms 且會掉包），所以 RDP 必須整段跑在這台上，只把畫面送回去。
+    # 裸 X11 轉發在 195ms 下不堪用（X11 每個繪圖操作都同步往返），VNC 是畫面式的、
+    # 耐延遲，而且 session 會留著 —— 斷線重連後對 target 的 RDP 還活著。
+    # openbox 只是給 xfreerdp 的視窗一個能移動/縮放/全螢幕的環境，不裝整套桌面。
+    tigervnc-standalone-server tigervnc-tools openbox x11-xserver-utils
     # 連線層。mosh 需要 GCP 防火牆另外開 UDP 60000-61000，否則裝了也連不進來。
     mosh openvpn proxychains4 iperf3 mtr-tiny rsync
     # recon / exploit
@@ -318,6 +324,36 @@ path=("$HOME/.local/bin" /usr/sbin /sbin $path)
 export PATH
 ENVEOF
 ok "~/.zshenv"
+
+phase "12b. VNC：把 xfreerdp 的畫面送回本地"
+mkdir -p "$HOME/.vnc"
+# localhost=1 讓 Xvnc 只綁 127.0.0.1，外網完全碰不到，一律走 SSH 隧道進來
+cat > "$HOME/.vnc/config" <<'VNCCFGEOF'
+geometry=1920x1080
+depth=24
+localhost
+alwaysshared
+VNCCFGEOF
+cat > "$HOME/.vnc/xstartup" <<'VNCXEOF'
+#!/bin/sh
+unset SESSION_MANAGER DBUS_SESSION_BUS_ADDRESS
+xsetroot -solid grey20
+exec openbox
+VNCXEOF
+chmod +x "$HOME/.vnc/xstartup"
+ok "~/.vnc/{config,xstartup}"
+
+# 密碼只在不存在時產生，否則每次重跑都會換掉、把既有連線設定弄壞。
+# VNC 的傳統認證最多吃 8 個字元，超過直接被截斷，所以就產生 8 碼。
+if [ -s "$HOME/.vnc/passwd" ] || [ -s "$HOME/.config/tigervnc/passwd" ]; then
+    ok "VNC 密碼已存在（保留不動）"
+else
+    _vncpw=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 8)
+    printf '%s\n' "$_vncpw" | vncpasswd -f > "$HOME/.vnc/passwd"
+    chmod 600 "$HOME/.vnc/passwd"
+    ok "VNC 密碼已產生：$_vncpw  ← 記下來，只顯示這一次"
+    unset _vncpw
+fi
 
 clone_if_absent https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
 [ -x "$HOME/.tmux/plugins/tpm/bin/install_plugins" ] \
