@@ -5,6 +5,9 @@ return {
     lazy = false,
     config = function()
       vim.g.copilot_no_tab_map = true
+      -- npm 12+ aborts `npx` in non-TTY LSP pipes when a newer version is
+      -- resolved unless `--yes` is passed.
+      vim.g.copilot_npx_command = { "npx", "--yes" }
       vim.keymap.set("i", "<C-j>", 'copilot#Accept("<CR>")', {
         expr = true,
         replace_keycodes = false,

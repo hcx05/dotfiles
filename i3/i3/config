@@ -77,6 +77,10 @@ exec --no-startup-id numlockx on
 # python daemons below. The session wrapper (start-i3-rice.sh) already
 # applied the scale once before i3 started, so i3 itself came up with it.
 exec_always --no-startup-id ~/.config/rice/scale/autoscale watch
+# Minimal XSETTINGS manager: publishes Xft/DPI + cursor size so GTK apps
+# live-update and Chromium / Electron apps (Chromium, Obsidian, ...) scale
+# with autoscale. Single-instance (flock); on-change sends SIGUSR1 on change.
+exec_always --no-startup-id python3 ~/.config/rice/scale/xsettingsd.py
 exec_always --no-startup-id ~/.config/polybar/launch.sh
 exec --no-startup-id picom --config ~/.config/picom/picom.conf -b
 exec --no-startup-id dunst
@@ -86,7 +90,6 @@ exec --no-startup-id ~/.config/i3/set-wallpaper.sh
 # exits immediately if one is already running instead of stacking another
 # -- that's what makes it safe to use exec_always instead of plain exec
 # here, unlike most of the autostart block above.
-exec_always --no-startup-id python3 ~/.config/i3/alt-tab.py daemon
 # Makes newly-opened windows map already maximized below the top bar (see
 # comment on the for_window catch-all below) instead of a small fixed size.
 exec_always --no-startup-id python3 ~/.config/i3/default-size.py daemon
@@ -107,19 +110,12 @@ exec --no-startup-id python3 ~/.config/rice/clipboard/clipd.py
 # xfce4-power-manager's autostart entry is OnlyShowIn=XFCE, so dex skips it
 # under i3 -- it still needs its own exec line here.
 exec --no-startup-id xfce4-power-manager
-# Desktop right-click menu ("桌面右鍵選單") -- global button-3 grab that
-# replays every click normally and ALSO runs desktop-menu.sh, which only
-# actually shows anything when the click landed on bare background. -f
-# points it at a rice-specific config instead of the default ~/.xbindkeysrc
-# so it doesn't collide with any other xbindkeys use on this machine.
-# exec_always (not plain exec): plain `exec` lines are documented to NOT
-# re-run on `i3 restart` (only on a fresh i3 start/login) -- confirmed live
-# in this session (a restart never relaunched a plain-exec xbindkeys).
-# pkill-then-relaunch (quoted as one shell command -- an unquoted `;` would
-# be parsed by i3 itself as an IPC command separator, not handed to the
-# shell) so repeated restarts don't stack duplicate instances fighting over
-# the same button-3 grab.
-exec_always --no-startup-id "pkill -x xbindkeys; sleep 0.2; xbindkeys -f ~/.config/i3/xbindkeysrc"
+# Desktop right-click menu ("桌面右鍵選單") -- passive XInput2 XI_RawButtonPress
+# watcher (no X11 grab, so right-click inside Burp/Firefox/terminals is never
+# swallowed, unlike xbindkeys' GrabModeAsync grab on b:3). Launches
+# desktop-menu.sh only when the click lands on bare desktop background.
+# Flock-guarded single-instance daemon, safe under exec_always.
+exec_always --no-startup-id python3 ~/.config/i3/desktop-menu-daemon.py
 # Right Shift, tapped alone (not held with another key), toggles English/
 # Zhuyin input -- ported from gh0stzk's sxhkd setup (xcape -e
 # 'Shift_R=XF86Launch1', paired with the XF86Launch1 bindsym above).
@@ -157,7 +153,7 @@ tiling_drag modifier
 # Application launch / control
 # ---------------------------------------------------------------------------
 bindsym $mod+Return exec kitty
-bindsym $mod+d exec rofi -show drun -config ~/.config/rofi/config.rasi
+bindsym $mod+d exec --no-startup-id ~/.config/rice/scale/with-scale-env rofi -show drun -config ~/.config/rofi/config.rasi
 # NOTE: deliberately NOT bound to $mod+space. The chewing engine's own
 # package file (/usr/share/ibus/component/chewing.xml) hardcodes
 # "Super+space" as its own "switch to me" hotkey at the ibus-daemon level,
@@ -183,14 +179,11 @@ bindsym $mod+Shift+e exec i3-nagbar -t warning -m 'Exit i3? This ends your sessi
 bindsym $mod+Shift+p exec --no-startup-id ~/.config/rofi/scripts/powermenu.sh
 
 # ---------------------------------------------------------------------------
-# Alt+Tab -- MRU window cycling (Windows/XFCE-style: hold Alt, tap Tab to
-# step back through recently-focused windows, release Alt to land on one).
-# Handled in default mode so i3 never gets trapped in a submode if X11's
-# Alt_L KeyRelease event carries Mod1Mask or fires before mode entry;
-# alt-tab.py watches XQueryKeymap for Alt release and commits the MRU order.
+# Alt+Tab -- open the same rofi window switcher as clicking the top bar's
+# active-window indicator (rofi -show window).
 # ---------------------------------------------------------------------------
-bindsym Mod1+Tab exec --no-startup-id python3 ~/.config/i3/alt-tab.py step
-bindsym Mod1+Shift+Tab exec --no-startup-id python3 ~/.config/i3/alt-tab.py step-back
+bindsym Mod1+Tab exec --no-startup-id rofi -show window -config ~/.config/rofi/config.rasi
+bindsym Mod1+Shift+Tab exec --no-startup-id rofi -show window -config ~/.config/rofi/config.rasi
 
 # ---------------------------------------------------------------------------
 # Focus movement (vim-style + arrows)

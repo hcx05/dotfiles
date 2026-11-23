@@ -51,7 +51,7 @@ choice=$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
 
 case "$choice" in
     "$ROW_TERM")   kitty & ;;
-    "$ROW_APPS")   rofi -show drun -config "$HOME/.config/rofi/config.rasi" & ;;
+    "$ROW_APPS")   ~/.config/rice/scale/with-scale-env rofi -show drun -config "$HOME/.config/rofi/config.rasi" & ;;
     "$ROW_THEME")  "$THEME_DIR/rice-selector.sh" ;;
     "$ROW_BAR")    "$THEME_DIR/bar-selector.sh" ;;
     "$ROW_WALL")   "$THEME_DIR/wallpaper-selector.sh" ;;

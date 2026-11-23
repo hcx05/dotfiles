@@ -246,3 +246,11 @@ bindkey '^[[B' history-substring-search-down
 
 # Added by Antigravity CLI installer
 export PATH="/home/kali/.local/bin:$PATH"
+
+# Pick up the latest rice display scale for GUI apps launched from a terminal
+# (Burp Suite, ZAP, Wireshark, Qt/Java tools) even after a mid-session screen
+# change when the WM's own inherited environment is still from login.
+if [[ -n "${DISPLAY:-}" && -r "$HOME/.cache/rice/scale.env" && -r "$HOME/.config/rice/scale/scale-lib.sh" ]]; then
+    source "$HOME/.config/rice/scale/scale-lib.sh"
+    export_scale_env
+fi

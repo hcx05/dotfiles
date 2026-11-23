@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Run a command with the latest display-scale toolkit env vars (Qt + Java)
+# read fresh from ~/.cache/rice/scale.env. Needed for launchers spawned by a
+# long-lived WM (i3 / rofi) whose own environment stays frozen from login
+# even after `autoscale` adjusts the scale on a screen change.
+SELF=$(readlink -f "$0")
+# shellcheck source=scale-lib.sh
+. "$(dirname "$SELF")/scale-lib.sh"
+export_scale_env
+exec "$@"

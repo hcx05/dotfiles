@@ -30,6 +30,15 @@ export GLFW_IM_MODULE=ibus
 # in i3's autostart (`autoscale watch`) keeps following screen changes.
 "$HOME/.config/rice/scale/autoscale" apply --force >/dev/null 2>&1 || true
 
+# Export Qt (fractional PassThrough from Xft.dpi) and Java (J2D_UISCALE)
+# HiDPI variables derived from the scale above, overriding kali-themes.sh's
+# QT_AUTO_SCREEN_SCALE_FACTOR=0 for this session.
+# shellcheck source=../rice/scale/scale-lib.sh
+if [ -r "$HOME/.config/rice/scale/scale-lib.sh" ]; then
+    . "$HOME/.config/rice/scale/scale-lib.sh"
+    export_scale_env
+fi
+
 # Do NOT export XMODIFIERS/GTK_IM_MODULE/QT_IM_MODULE/CLUTTER_IM_MODULE here --
 # im-launch (Debian/Kali's im-config wrapper) only sets them up and starts
 # ibus-daemon if they are still unset when it runs. Pre-setting them would

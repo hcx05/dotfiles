@@ -6,6 +6,14 @@
 # (exec_always) on every reload -- including the reload switch-theme.sh does.
 
 source "$HOME/.config/rice/theme.conf" 2>/dev/null
+# Export fresh Qt / Java display-scale env vars so apps launched from
+# polybar's quicklaunch or the dock (burpsuite, zap, wireshark, ...) pick
+# up the current scale even after a mid-session screen change.
+if [ -r "$HOME/.config/rice/scale/scale-lib.sh" ]; then
+    # shellcheck source=../rice/scale/scale-lib.sh
+    . "$HOME/.config/rice/scale/scale-lib.sh"
+    export_scale_env
+fi
 # bar-selector.sh ($mod+Shift+t) overrides the theme's own LAYOUT -- see the
 # matching comment in ~/.config/rice/apply-theme.sh. Must be kept in sync:
 # this script decides which bar binary to launch, apply-theme.sh decides the
